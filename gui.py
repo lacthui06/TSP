@@ -165,24 +165,50 @@ class GraphGUI:
         f = self.graph.ford_fulkerson(s,t); CustomPopup(self.root, "Max Flow", f"Luồng Cực Đại: {f}")
 
     def run_fleury(self):
+        # Kiểm tra điều kiện Euler trước
         status, msg, auto_start_node = self.graph.get_euler_status()
-        if status == 0: CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True); return
+        
+        if status == 0: 
+            CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True)
+            return
+
+        # BƯỚC 1: Thông báo tính chất đồ thị TRƯỚC
+        # msg sẽ là "Đồ thị có chu trình Euler" hoặc "Đồ thị có đường đi Euler"
+        CustomPopup(self.root, "Kiểm Tra Euler", f"Phát hiện: {msg}\n\nBấm 'Đã Hiểu' để chọn đỉnh (nếu cần) và chạy mô phỏng.")
+
+        # Logic chọn đỉnh bắt đầu (giữ nguyên)
         final_start_node = auto_start_node
-        if status == 2:
+        if status == 2: # Chu trình (bắt đầu ở đâu cũng được)
             user_choice, _ = self.ask_node("Fleury", f"Chọn Đỉnh Bắt Đầu:\n(Mặc định: {auto_start_node})")
             if user_choice is not None:
                 has_edge = any(e.u==user_choice or e.v==user_choice for e in self.graph.edges)
                 if has_edge: final_start_node = user_choice
                 else: CustomPopup(self.root, "Lỗi", f"Đỉnh {user_choice} cô lập, dùng mặc định {auto_start_node}", is_error=True)
+        
         try:
+            # Tính toán đường đi
             p = self.graph.fleury_algo(final_start_node)
+            
+            # BƯỚC 2: Visualize (Vẽ màu)
             self.hl_path_fill(p, "#f1c40f")
+            
+            # BƯỚC 3: Hiện kết quả cuối cùng
             CustomPopup(self.root, "Kết Quả Fleury", f"Lộ trình: {p}")
-        except Exception as e: CustomPopup(self.root, "Lỗi", str(e), is_error=True)
+        except Exception as e: 
+            CustomPopup(self.root, "Lỗi", str(e), is_error=True)
 
     def run_hierholzer(self):
+        # Kiểm tra điều kiện Euler trước
         status, msg, auto_start_node = self.graph.get_euler_status()
-        if status == 0: CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True); return
+        
+        if status == 0: 
+            CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True)
+            return
+
+        # BƯỚC 1: Thông báo tính chất đồ thị TRƯỚC
+        CustomPopup(self.root, "Kiểm Tra Euler", f"Phát hiện: {msg}\n\nBấm 'Đã Hiểu' để chọn đỉnh (nếu cần) và chạy mô phỏng.")
+
+        # Logic chọn đỉnh bắt đầu (giữ nguyên)
         final_start_node = auto_start_node
         if status == 2:
             user_choice, _ = self.ask_node("Hierholzer", f"Chọn Đỉnh Bắt Đầu:\n(Mặc định: {auto_start_node})")
@@ -190,17 +216,37 @@ class GraphGUI:
                 has_edge = any(e.u==user_choice or e.v==user_choice for e in self.graph.edges)
                 if has_edge: final_start_node = user_choice
                 else: CustomPopup(self.root, "Lỗi", f"Đỉnh {user_choice} cô lập, dùng mặc định {auto_start_node}", is_error=True)
+        
         try:
+            # Tính toán đường đi
             p = self.graph.hierholzer_algo(final_start_node)
+            
+            # BƯỚC 2: Visualize (Vẽ màu)
             self.hl_path_fill(p, "#e67e22")
+            
+            # BƯỚC 3: Hiện kết quả cuối cùng
             CustomPopup(self.root, "Kết Quả Hierholzer", f"Lộ trình: {p}")
-        except Exception as e: CustomPopup(self.root, "Lỗi", str(e), is_error=True)
-
+        except Exception as e: 
+            CustomPopup(self.root, "Lỗi", str(e), is_error=True)
+            
     def run_hamilton(self):
-        if len(self.graph.nodes) < 3: CustomPopup(self.root, "Lỗi", "Đồ thị cần ít nhất 3 đỉnh để xét chu trình Hamilton.", is_error=True); return
+        if len(self.graph.nodes) < 3: 
+            CustomPopup(self.root, "Lỗi", "Đồ thị cần ít nhất 3 đỉnh để xét chu trình Hamilton.", is_error=True)
+            return
+            
         found, path = self.graph.check_hamilton()
-        if found: self.hl_path_fill(path, "#e84393"); CustomPopup(self.root, "Thành Công", f"Tìm thấy Chu trình Hamilton:\n{path}")
-        else: CustomPopup(self.root, "Thất Bại", "Không tồn tại chu trình Hamilton trong đồ thị này.", is_error=True)
+        
+        if found:
+            # BƯỚC 1: Thông báo tìm thấy TRƯỚC
+            CustomPopup(self.root, "Thành Công", "Đã tìm thấy Chu trình Hamilton!\nBấm 'Đã Hiểu' để bắt đầu chạy mô phỏng.")
+            
+            # BƯỚC 2: Sau đó mới chạy Visualize (Vẽ màu)
+            self.hl_path_fill(path, "#e84393")
+            
+            # BƯỚC 3: Hiện chi tiết lộ trình sau khi chạy xong
+            CustomPopup(self.root, "Kết Quả Chi Tiết", f"Thứ tự đi:\n{path}")
+        else:
+            CustomPopup(self.root, "Thất Bại", "Không tồn tại chu trình Hamilton trong đồ thị này.", is_error=True)
 
     def run_prim(self): 
         if any(e.is_directed for e in self.graph.edges): CustomPopup(self.root, "Lỗi Thuật Toán", "MST (Prim) chỉ áp dụng cho đồ thị VÔ HƯỚNG!", is_error=True); return
