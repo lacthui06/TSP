@@ -53,14 +53,12 @@ class AlgorithmSelectorDialog(tk.Toplevel):
         self.option_add('*TCombobox*Listbox.font', ("Segoe UI", 16)) 
         
         # --- CHỈNH SỬA KÍCH THƯỚC CỬA SỔ ---
-        # Tăng chiều cao (h) từ 350 lên 550 để chứa đủ nội dung
         w, h = 600, 550 
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         self.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
         # UI Elements
-        # Label 1
         tk.Label(self, text="Chọn Loại Thuật Toán", font=("Segoe UI", 16, "bold"), bg="white", fg="#7f8c8d").pack(pady=(30, 10))
         
         # Combobox Nhóm (Category)
@@ -82,17 +80,18 @@ class AlgorithmSelectorDialog(tk.Toplevel):
 
         # Buttons Frame
         f_btn = tk.Frame(self, bg="white")
-        f_btn.pack(pady=40, fill=tk.X) # Tăng khoảng cách nút bấm xuống dưới
+        f_btn.pack(pady=40, fill=tk.X) 
         
         # Center buttons
         f_inner = tk.Frame(f_btn, bg="white")
         f_inner.pack()
 
+        # --- NÚT BẤM TO (PADX=40) ---
         tk.Button(f_inner, text="Chạy Thuật Toán", command=self.ok, bg="#2980b9", fg="white", 
-                  font=("Segoe UI", 14, "bold"), padx=30, pady=10, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=20)
+                  font=("Segoe UI", 14, "bold"), padx=40, pady=10, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=20)
         
         tk.Button(f_inner, text="Hủy", command=self.destroy, bg="#95a5a6", fg="white", 
-                  font=("Segoe UI", 14, "bold"), padx=30, pady=10, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=20)
+                  font=("Segoe UI", 14, "bold"), padx=40, pady=10, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=20)
 
         self.transient(parent)
         self.grab_set()
@@ -122,10 +121,14 @@ class ComboSelectionDialog(tk.Toplevel):
         self.result = None
         self.extra_val = False
         
-        w, h = 450, 300
+        # Tăng kích thước một chút cho thoáng
+        w, h = 500, 400
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         self.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+
+        # Thêm option_add cho font listbox to
+        self.option_add('*TCombobox*Listbox.font', ("Segoe UI", 16))
 
         tk.Label(self, text=prompt, font=("Segoe UI", 16, "bold"), bg="white", fg="#2c3e50").pack(pady=(25, 10))
         
@@ -141,9 +144,14 @@ class ComboSelectionDialog(tk.Toplevel):
 
         self.cb.focus()
         f_btn = tk.Frame(self, bg="white")
-        f_btn.pack(pady=20)
-        tk.Button(f_btn, text="Xác Nhận", command=self.ok, bg="#27ae60", fg="white", font=("Segoe UI", 14, "bold"), padx=20, pady=8, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=15)
-        tk.Button(f_btn, text="Hủy", command=self.destroy, bg="#e74c3c", fg="white", font=("Segoe UI", 14, "bold"), padx=20, pady=8, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=15)
+        f_btn.pack(pady=40) # Tăng khoảng cách nút
+
+        # --- NÚT BẤM TO (PADX=40) ---
+        tk.Button(f_btn, text="Xác Nhận", command=self.ok, bg="#27ae60", fg="white", 
+                  font=("Segoe UI", 14, "bold"), padx=40, pady=10, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=15)
+        tk.Button(f_btn, text="Hủy", command=self.destroy, bg="#e74c3c", fg="white", 
+                  font=("Segoe UI", 14, "bold"), padx=40, pady=10, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=15)
+        
         self.bind('<Return>', self.ok)
         self.transient(parent); self.grab_set(); self.wait_window(self)
 
@@ -183,16 +191,14 @@ class RoundedButton(tk.Canvas):
     def on_leave(self, event): self.draw_button(self.bg_color)
 
 # =======================================================================================
-# EDGE INPUT DIALOG
-# =======================================================================================
-# =======================================================================================
-# EDGE INPUT DIALOG - DEFAULT UNCHECKED (VÔ HƯỚNG)
+# EDGE INPUT DIALOG - DEFAULT UNCHECKED (VÔ HƯỚNG) & BIG BUTTONS
 # =======================================================================================
 class EdgeDialog(tk.Toplevel):
     def __init__(self, parent, u, v):
         super().__init__(parent)
         self.title("Thêm Cạnh")
-        self.geometry("550x400")
+        # Tăng chiều cao lên 450 để chứa nút to
+        self.geometry("550x450")
         self.configure(bg="white")
         self.result = None
         
@@ -211,21 +217,21 @@ class EdgeDialog(tk.Toplevel):
         self.ew.pack(side=tk.LEFT, padx=15, ipady=5)
         self.ew.focus()
         
-        # --- THAY ĐỔI Ở ĐÂY ---
-        # value=False: Mặc định là KHÔNG có hướng (unchecked)
+        # Mặc định KHÔNG hướng
         self.vd = tk.BooleanVar(value=False) 
         
         tk.Checkbutton(self, text="Có hướng (Mũi tên)", variable=self.vd, bg="white", 
                        font=main_font, fg="#e67e22", cursor="hand2").pack(pady=20)
         
         f_btn = tk.Frame(self, bg="white")
-        f_btn.pack(pady=20)
+        f_btn.pack(pady=40) # Tăng khoảng cách
         
+        # --- NÚT BẤM TO (PADX=40) ---
         tk.Button(f_btn, text="Xác Nhận", command=self.ok, bg="#27ae60", fg="white", 
-                  font=btn_font, width=15, pady=10, bd=0, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=15)
+                  font=btn_font, padx=40, pady=10, bd=0, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=15)
         
         tk.Button(f_btn, text="Hủy Bỏ", command=self.destroy, bg="#e74c3c", fg="white", 
-                  font=btn_font, width=15, pady=10, bd=0, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=15)
+                  font=btn_font, padx=40, pady=10, bd=0, relief="flat", cursor="hand2").pack(side=tk.LEFT, padx=15)
         
         self.bind('<Return>', self.ok) 
         self.transient(parent)
