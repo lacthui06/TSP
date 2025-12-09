@@ -230,21 +230,48 @@ class GraphGUI:
             CustomPopup(self.root, "Lỗi", str(e), is_error=True)
             
     def run_hamilton(self):
+        # 1. Kiểm tra số lượng đỉnh tối thiểu
         if len(self.graph.nodes) < 3: 
             CustomPopup(self.root, "Lỗi", "Đồ thị cần ít nhất 3 đỉnh để xét chu trình Hamilton.", is_error=True)
             return
-            
-        found, path = self.graph.check_hamilton()
+
+        # 2. Tìm kiếm chu trình (Mặc định thuật toán sẽ tìm ra 1 chu trình bất kỳ nếu có)
+        found, initial_path = self.graph.check_hamilton()
         
         if found:
-            # BƯỚC 1: Thông báo tìm thấy TRƯỚC
-            CustomPopup(self.root, "Thành Công", "Đã tìm thấy Chu trình Hamilton!\nBấm 'Đã Hiểu' để bắt đầu chạy mô phỏng.")
+            # BƯỚC A: Thông báo tìm thấy TRƯỚC
+            CustomPopup(self.root, "Thành Công", "Đã tìm thấy Chu trình Hamilton!\nBấm 'Đã Hiểu' để chọn đỉnh xuất phát.")
             
-            # BƯỚC 2: Sau đó mới chạy Visualize (Vẽ màu)
-            self.hl_path_fill(path, "#e84393")
+            # BƯỚC B: Hỏi người dùng chọn đỉnh bắt đầu
+            # Mặc định lấy đỉnh đầu tiên của chu trình tìm được
+            default_start = initial_path[0]
+            user_choice, _ = self.ask_node("Hamilton", f"Chọn Đỉnh Bắt Đầu:\n(Chu trình đi qua mọi đỉnh)")
+
+            final_path = initial_path
             
-            # BƯỚC 3: Hiện chi tiết lộ trình sau khi chạy xong
-            CustomPopup(self.root, "Kết Quả Chi Tiết", f"Thứ tự đi:\n{path}")
+            # BƯỚC C: Xử lý xoay vòng lộ trình theo đỉnh người chọn
+            if user_choice is not None:
+                # initial_path có dạng [0, 1, 2, 3, 0] (đỉnh cuối lặp lại đỉnh đầu)
+                # Ta cần bỏ đỉnh cuối đi để thành danh sách các đỉnh duy nhất: [0, 1, 2, 3]
+                unique_nodes = initial_path[:-1]
+                
+                if user_choice in unique_nodes:
+                    idx = unique_nodes.index(user_choice)
+                    # Kỹ thuật xoay mảng (List Slicing): Đưa phần sau lên trước
+                    # Ví dụ: [0, 1, 2, 3] chọn 2 (idx=2) -> [2, 3] + [0, 1] = [2, 3, 0, 1]
+                    rotated = unique_nodes[idx:] + unique_nodes[:idx]
+                    # Khép vòng lại (thêm đỉnh đầu vào cuối)
+                    rotated.append(user_choice)
+                    final_path = rotated
+                else:
+                    # Trường hợp cực hiếm: người dùng nhập 1 đỉnh không có trong đồ thị (dù đã chọn list)
+                    CustomPopup(self.root, "Cảnh báo", "Đỉnh chọn không hợp lệ, dùng lộ trình mặc định.", is_error=True)
+
+            # BƯỚC D: Chạy Visualize
+            self.hl_path_fill(final_path, "#e84393")
+            
+            # BƯỚC E: Hiện kết quả chi tiết
+            CustomPopup(self.root, "Kết Quả Chi Tiết", f"Thứ tự đi từ {final_path[0]}:\n{final_path}")
         else:
             CustomPopup(self.root, "Thất Bại", "Không tồn tại chu trình Hamilton trong đồ thị này.", is_error=True)
 
