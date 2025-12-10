@@ -52,65 +52,31 @@ class Graph:
             if not e.is_directed: mat[e.v][e.u] = e.weight
         return mat
 
-    # --- UPDATED ALGORITHMS (SORT LOGIC ADDED) ---
+    # --- ALGORITHMS ---
     
     def bfs(self, s, descending=False):
-        """
-        descending=False: Duyệt ưu tiên ID nhỏ trước (Nhỏ -> Lớn)
-        descending=True:  Duyệt ưu tiên ID lớn trước (Lớn -> Nhỏ)
-        """
         if s is None or s >= len(self.nodes): return []
         adj = self.get_adj() 
         vis = set(); q = deque([s]); vis.add(s); p = []
-        
         while q:
-            u = q.popleft()
-            p.append(u)
-            # Lấy danh sách kề
+            u = q.popleft(); p.append(u)
             neighbors = [item for item in adj[u] if item[0] not in vis]
-            
-            # Sắp xếp trước khi đưa vào Queue
-            # BFS Queue: Muốn ra trước thì vào trước.
-            # Nếu muốn Nhỏ->Lớn (descending=False) => Sort Tăng dần (reverse=False)
             neighbors.sort(key=lambda x: x[0], reverse=descending)
-            
             for v, w in neighbors:
-                if v not in vis:
-                    vis.add(v)
-                    q.append(v)
+                if v not in vis: vis.add(v); q.append(v)
         return p
     
     def dfs(self, s, descending=False):
-        """
-        descending=False: Duyệt ưu tiên ID nhỏ trước
-        descending=True:  Duyệt ưu tiên ID lớn trước
-        """
         if s is None or s >= len(self.nodes): return []
-        adj = self.get_adj()
-        
-        # Dùng Stack để mô phỏng DFS (hoặc đệ quy)
-        # Ở đây dùng Stack: Last In First Out.
-        vis = set(); stack = [s]; p = []
-        
+        adj = self.get_adj(); vis = set(); stack = [s]; p = []
         while stack:
             u = stack.pop()
             if u not in vis:
-                vis.add(u)
-                p.append(u)
-                
-                # Lấy hàng xóm chưa thăm
+                vis.add(u); p.append(u)
                 neighbors = [item for item in adj[u] if item[0] not in vis]
-                
-                # LOGIC QUAN TRỌNG VỚI STACK:
-                # Muốn thăm A trước B, thì phải đẩy B vào trước, A vào sau (A sẽ ở đỉnh stack).
-                # -> Nếu muốn duyệt Nhỏ -> Lớn (descending=False): Phải đẩy Lớn -> Nhỏ vào stack.
-                #    => Sort reverse=True
                 sort_order_for_stack = not descending 
-                
                 neighbors.sort(key=lambda x: x[0], reverse=sort_order_for_stack)
-                
-                for v, w in neighbors:
-                    stack.append(v)
+                for v, w in neighbors: stack.append(v)
         return p
 
     def dijkstra(self, s, e):
@@ -130,10 +96,7 @@ class Graph:
         return p[::-1], dist[e]
 
     def bellman_ford(self, s, e):
-        n = len(self.nodes)
-        dist = {i: float('inf') for i in range(n)}
-        dist[s] = 0
-        par = {i: None for i in range(n)}
+        n = len(self.nodes); dist = {i: float('inf') for i in range(n)}; dist[s] = 0; par = {i: None for i in range(n)}
         for _ in range(n - 1):
             changed = False
             for edge in self.edges:
@@ -148,10 +111,7 @@ class Graph:
             if not edge.is_directed and dist[edge.v] != float('inf') and dist[edge.v] + edge.weight < dist[edge.u]: return None, float('-inf')
         if dist[e] == float('inf'): return None, float('inf')
         p = []; curr = e
-        while curr is not None:
-            p.append(curr); 
-            if curr == s: break
-            curr = par[curr]
+        while curr is not None: p.append(curr); curr = par[curr]
         return p[::-1], dist[e]
 
     def prim(self):
@@ -211,6 +171,37 @@ class Graph:
             if ham_cycle_util(1):
                 path.append(path[0])
                 return True, path
+        return False, []
+
+    # --- HÀM MỚI: TÌM ĐƯỜNG ĐI HAMILTON (KHÔNG CẦN KÍN) ---
+    def check_hamilton_path(self):
+        n = len(self.nodes)
+        if n == 0: return False, []
+        adj = self.get_adj()
+        visited = [False] * n
+        path = []
+
+        def is_safe(v, pos, path):
+            u = path[pos-1]
+            is_adjacent = False
+            for neighbor, _ in adj[u]:
+                if neighbor == v: is_adjacent = True; break
+            if not is_adjacent: return False
+            if visited[v]: return False
+            return True
+
+        def ham_path_util(pos):
+            if pos == n: return True
+            for v in range(n):
+                if is_safe(v, pos, path):
+                    path.append(v); visited[v] = True
+                    if ham_path_util(pos + 1): return True
+                    visited[v] = False; path.pop()
+            return False
+
+        for start_node in range(n):
+            path = [start_node]; visited = [False] * n; visited[start_node] = True
+            if ham_path_util(1): return True, path
         return False, []
 
     def get_euler_status(self):

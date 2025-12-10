@@ -40,9 +40,6 @@ class CustomPopup(tk.Toplevel):
 # =======================================================================================
 class AlgorithmSelectorDialog(tk.Toplevel):
     def __init__(self, parent, algo_map):
-        """
-        algo_map: Dictionary dạng { "Tên Nhóm": { "Tên Thuật Toán": function_callback } }
-        """
         super().__init__(parent)
         self.title("Thư Viện Thuật Toán")
         self.configure(bg="white")
@@ -61,28 +58,22 @@ class AlgorithmSelectorDialog(tk.Toplevel):
         # UI Elements
         tk.Label(self, text="Chọn Loại Thuật Toán", font=("Segoe UI", 16, "bold"), bg="white", fg="#7f8c8d").pack(pady=(30, 10))
         
-        # Combobox Nhóm (Category)
         self.groups = list(self.algo_map.keys())
         self.cb_group = ttk.Combobox(self, values=self.groups, font=("Segoe UI", 16), state="readonly", width=35)
         self.cb_group.current(0)
-        self.cb_group.pack(pady=5, ipady=10) # Tăng chiều cao ô nhập
+        self.cb_group.pack(pady=5, ipady=10)
         self.cb_group.bind("<<ComboboxSelected>>", self.on_group_change)
 
-        # Label 2
         tk.Label(self, text="Chọn Thuật Toán Cụ Thể", font=("Segoe UI", 16, "bold"), bg="white", fg="#2c3e50").pack(pady=(30, 10))
 
-        # Combobox Thuật toán (Specific Algorithm)
         self.cb_algo = ttk.Combobox(self, font=("Segoe UI", 16), state="readonly", width=35)
-        self.cb_algo.pack(pady=5, ipady=10) # Tăng chiều cao ô nhập
+        self.cb_algo.pack(pady=5, ipady=10)
         
-        # Init list thuật toán lần đầu
         self.on_group_change(None)
 
-        # Buttons Frame
         f_btn = tk.Frame(self, bg="white")
         f_btn.pack(pady=40, fill=tk.X) 
         
-        # Center buttons
         f_inner = tk.Frame(f_btn, bg="white")
         f_inner.pack()
 
@@ -121,13 +112,11 @@ class ComboSelectionDialog(tk.Toplevel):
         self.result = None
         self.extra_val = False
         
-        # Tăng kích thước một chút cho thoáng
         w, h = 500, 400
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         self.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
-        # Thêm option_add cho font listbox to
         self.option_add('*TCombobox*Listbox.font', ("Segoe UI", 16))
 
         tk.Label(self, text=prompt, font=("Segoe UI", 16, "bold"), bg="white", fg="#2c3e50").pack(pady=(25, 10))
@@ -144,7 +133,7 @@ class ComboSelectionDialog(tk.Toplevel):
 
         self.cb.focus()
         f_btn = tk.Frame(self, bg="white")
-        f_btn.pack(pady=40) # Tăng khoảng cách nút
+        f_btn.pack(pady=40)
 
         # --- NÚT BẤM TO (PADX=40) ---
         tk.Button(f_btn, text="Xác Nhận", command=self.ok, bg="#27ae60", fg="white", 
@@ -191,13 +180,12 @@ class RoundedButton(tk.Canvas):
     def on_leave(self, event): self.draw_button(self.bg_color)
 
 # =======================================================================================
-# EDGE INPUT DIALOG - DEFAULT UNCHECKED (VÔ HƯỚNG) & BIG BUTTONS
+# EDGE INPUT DIALOG
 # =======================================================================================
 class EdgeDialog(tk.Toplevel):
     def __init__(self, parent, u, v):
         super().__init__(parent)
         self.title("Thêm Cạnh")
-        # Tăng chiều cao lên 450 để chứa nút to
         self.geometry("550x450")
         self.configure(bg="white")
         self.result = None
@@ -224,7 +212,7 @@ class EdgeDialog(tk.Toplevel):
                        font=main_font, fg="#e67e22", cursor="hand2").pack(pady=20)
         
         f_btn = tk.Frame(self, bg="white")
-        f_btn.pack(pady=40) # Tăng khoảng cách
+        f_btn.pack(pady=40)
         
         # --- NÚT BẤM TO (PADX=40) ---
         tk.Button(f_btn, text="Xác Nhận", command=self.ok, bg="#27ae60", fg="white", 
