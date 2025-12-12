@@ -173,7 +173,6 @@ class Graph:
                 return True, path
         return False, []
 
-    # --- HÀM MỚI: TÌM ĐƯỜNG ĐI HAMILTON (KHÔNG CẦN KÍN) ---
     def check_hamilton_path(self):
         n = len(self.nodes)
         if n == 0: return False, []
@@ -246,31 +245,84 @@ class Graph:
             elif len(odd_nodes) == 2: return 1, "Đồ thị VÔ HƯỚNG: Đường đi Euler", odd_nodes[0]
             else: return 0, f"Đồ thị VÔ HƯỚNG: Không Euler ({len(odd_nodes)} lẻ)", None
 
+    # --- FLEURY ALGORITHM (GREEDY REACHABILITY FIX) ---
     def fleury_algo(self, start_node):
-        is_directed = any(e.is_directed for e in self.edges)
+        is_directed_graph = any(e.is_directed for e in self.edges)
+        
+        # Tạo bản sao danh sách kề
         adj = defaultdict(list)
         for e in self.edges:
             adj[e.u].append(e.v)
-            if not is_directed and not e.is_directed: adj[e.v].append(e.u)
-            elif is_directed and not e.is_directed: adj[e.v].append(e.u)
-        path = [start_node]; curr = start_node
-        while True:
-            if not adj[curr]: break
-            chosen_v = -1; 
-            if len(adj[curr]) == 1: chosen_v = adj[curr][0]
+            if not is_directed_graph and not e.is_directed:
+                adj[e.v].append(e.u)
+            elif is_directed_graph and not e.is_directed:
+                adj[e.v].append(e.u)
+
+        # Hàm BFS đếm số lượng đỉnh có thể đến được từ start_node
+        # Dùng để kiểm tra: Nếu đi đường này thì "tương lai" rộng mở thế nào?
+        def count_reachable(start, current_adj):
+            if start not in current_adj and not any(start in vals for vals in current_adj.values()):
+                return 0
+            vis = set([start])
+            q = deque([start])
+            count = 0
+            while q:
+                u = q.popleft()
+                count += 1
+                if u in current_adj:
+                    for v in current_adj[u]:
+                        if v not in vis:
+                            vis.add(v)
+                            q.append(v)
+            return count
+
+        path = [start_node]
+        curr = start_node
+        
+        while adj[curr]:
+            candidates = adj[curr]
+            
+            # Nếu chỉ có 1 đường, bắt buộc phải đi
+            if len(candidates) == 1:
+                chosen_v = candidates[0]
             else:
-                for v in adj[curr]:
+                # Nếu có nhiều đường, thử đi từng đường và xem
+                # đường nào dẫn đến nơi có thể tiếp cận NHIỀU đỉnh nhất (Max Reachability)
+                best_v = -1
+                max_reach = -1
+                
+                # Copy candidates ra list mới để không bị lỗi khi loop
+                for v in list(candidates):
+                    # Thử xóa cạnh curr -> v
                     adj[curr].remove(v)
-                    if not is_directed: adj[v].remove(curr)
+                    if not is_directed_graph:
+                        adj[v].remove(curr)
+                    
+                    # QUAN TRỌNG: Đếm số đỉnh đến được TỪ V (Đích đến)
+                    # Logic: Ta muốn đi đến nơi mà từ đó ta có thể đi được nhiều nơi nhất
+                    # thay vì chui vào ngõ cụt.
+                    c = count_reachable(v, adj)
+                    
+                    # Trả lại cạnh
                     adj[curr].append(v)
-                    if not is_directed: adj[v].append(curr)
-                    chosen_v = v; break 
-                if chosen_v == -1: chosen_v = adj[curr][0]
+                    if not is_directed_graph:
+                        adj[v].append(curr)
+                    
+                    if c > max_reach:
+                        max_reach = c
+                        best_v = v
+                
+                chosen_v = best_v if best_v != -1 else candidates[0]
+
+            # Thực hiện nước đi chính thức
             adj[curr].remove(chosen_v)
-            if not is_directed: 
+            if not is_directed_graph:
                 try: adj[chosen_v].remove(curr)
-                except: pass
-            path.append(chosen_v); curr = chosen_v
+                except ValueError: pass
+                
+            path.append(chosen_v)
+            curr = chosen_v
+            
         return path
 
     def hierholzer_algo(self, start_node):

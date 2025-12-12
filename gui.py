@@ -144,7 +144,7 @@ class GraphGUI:
         e, _ = self.ask_node("Dijkstra", "Chọn Điểm Đến (End):")
         if e is None: return
         p, w = self.graph.dijkstra(s,e)
-        if p: self.hl_path_fill(p, "#e74c3c"); CustomPopup(self.root, "Kết Quả", f"Tổng Chi Phí: {w}\nLộ Trình: {p}")
+        if p: self.hl_path_fill(p, "#e74c3c"); CustomPopup(self.root, "Kết Quả", f"Tổng quãng đường: {w}\nLộ Trình: {p}")
         else: CustomPopup(self.root, "Lỗi", "Không tìm thấy đường đi!", is_error=True)
 
     def run_bellman_ford(self):
@@ -154,7 +154,7 @@ class GraphGUI:
         if e is None: return
         path, cost = self.graph.bellman_ford(s, e)
         if cost == float('-inf'): CustomPopup(self.root, "Cảnh Báo", "Phát hiện CHU TRÌNH ÂM!\nKhông thể tính đường đi ngắn nhất.", is_error=True)
-        elif path: self.hl_path_fill(path, "#e74c3c"); CustomPopup(self.root, "Kết Quả", f"Tổng Chi Phí: {cost}\nLộ Trình: {path}")
+        elif path: self.hl_path_fill(path, "#e74c3c"); CustomPopup(self.root, "Kết Quả", f"Tổng quãng đường: {cost}\nLộ Trình: {path}")
         else: CustomPopup(self.root, "Lỗi", "Không tìm thấy đường đi!", is_error=True)
 
     def run_maxflow(self):
