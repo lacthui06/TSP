@@ -9,7 +9,7 @@ from components import RoundedButton, CustomPopup, EdgeDialog, ComboSelectionDia
 class GraphGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("DSA Graph Master - Optimized (Big Font & Grouped Algo)")
+        self.root.title("DSA Graph Master - Optimized")
         self.root.geometry("1600x900")
         self.root.configure(bg="#fdfdfd")
         
@@ -30,9 +30,15 @@ class GraphGUI:
         self.offset_x = 0; self.offset_y = 0
         self.last_mouse_x = 0; self.last_mouse_y = 0
 
+        # Menu chuột phải
+        self.context_menu = tk.Menu(self.root, tearoff=0, font=("Segoe UI", 12))
+        # Các lệnh sẽ được add động (dynamic) tùy vào click trúng cái gì
+        
+        self.target_for_deletion = None # Lưu đối tượng cần xóa (có thể là cạnh hoặc đỉnh)
+        self.delete_mode = None # "edge" hoặc "node"
+
         self.setup_ui()
 
-    # ... (Giữ nguyên các hàm to_screen_x, to_world_x cũ) ...
     def to_screen_x(self, world_x): return (world_x + self.offset_x) * self.zoom_scale
     def to_screen_y(self, world_y): return (world_y + self.offset_y) * self.zoom_scale
     def to_world_x(self, screen_x): return (screen_x / self.zoom_scale) - self.offset_x
@@ -40,13 +46,11 @@ class GraphGUI:
 
     def setup_ui(self):
         sb_bg = "#2c3e50"
-        # Sidebar rộng 380px
         sb = tk.Frame(self.root, bg=sb_bg, width=380); sb.pack(side=tk.LEFT, fill=tk.Y); sb.pack_propagate(False)
         tk.Label(sb, text="GRAPH", font=("Segoe UI", 36, "bold"), bg=sb_bg, fg="white").pack(pady=30)
         
         def group_lbl(txt): tk.Label(sb, text=txt, bg=sb_bg, fg="#bdc3c7", font=("Segoe UI", 14, "bold")).pack(anchor="w", padx=25, pady=(20, 5))
 
-        # NÚT BẤM TO HƠN: Width = 340 (để vừa sidebar 380)
         BTN_W = 340
         BTN_H = 55
 
@@ -60,11 +64,8 @@ class GraphGUI:
         RoundedButton(sb, "Xem Bảng Dữ Liệu", self.show_data, bg_color="#8e44ad", hover_color="#9b59b6", width=BTN_W, height=BTN_H).pack(pady=5)
 
         group_lbl("THUẬT TOÁN")
-        # BFS và DFS vẫn để ngoài cho tiện
         RoundedButton(sb, "BFS (Loang)", self.run_bfs, bg_color="#2980b9", hover_color="#3498db", width=BTN_W, height=BTN_H).pack(pady=5)
         RoundedButton(sb, "DFS (Sâu)", self.run_dfs, bg_color="#2980b9", hover_color="#3498db", width=BTN_W, height=BTN_H).pack(pady=5)
-        
-        # Nút "Nâng Cao" đổi tên và làm to ra để sửa lỗi ảnh 1
         RoundedButton(sb, "Thư Viện Thuật Toán", self.show_adv_menu, bg_color="#f39c12", hover_color="#f1c40f", width=BTN_W, height=BTN_H).pack(pady=5)
 
         main = tk.Frame(self.root, bg="#fdfdfd"); main.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -77,15 +78,88 @@ class GraphGUI:
         self.cv.bind("<MouseWheel>", self.zoom_event) 
         self.cv.bind("<Button-4>", self.zoom_event)
         self.cv.bind("<Button-5>", self.zoom_event)
-        self.cv.bind("<Button-3>", self.start_pan)
+        
+        # Binding chuột phải
+        self.cv.bind("<Button-3>", self.on_right_click)
         self.cv.bind("<B3-Motion>", self.motion_pan)
         
-        tk.Label(main, text="🖱️ Trái: Tạo/Kéo | Phải: Kéo Màn Hình | Lăn Chuột: Phóng To/Nhỏ | Ctrl+Z: Undo", 
+        tk.Label(main, text="🖱️ Trái: Tạo/Kéo | Phải: Menu Xóa (Click Đỉnh/Cạnh) hoặc Kéo Màn Hình | Ctrl+Z: Undo", 
                  bg="#fdfdfd", fg="black", font=("Segoe UI", 14, "bold")).pack(pady=10)
 
-    # --- MENU THUẬT TOÁN MỚI (GOM NHÓM LISTBOX) ---
+    # --- LOGIC XỬ LÝ CHUỘT PHẢI (PAN / DELETE NODE / DELETE EDGE) ---
+    def on_right_click(self, event):
+        # Chuyển đổi tọa độ chuột sang World
+        wx = self.to_world_x(self.cv.canvasx(event.x))
+        wy = self.to_world_y(self.cv.canvasy(event.y))
+
+        # 1. Ưu tiên kiểm tra ĐỈNH (Node) trước
+        clicked_node_id = self.find_node(wx, wy)
+        
+        if clicked_node_id is not None:
+            self.target_for_deletion = clicked_node_id
+            self.delete_mode = "node"
+            self.context_menu.delete(0, tk.END) # Xóa menu cũ
+            self.context_menu.add_command(label=f"❌ Xóa Đỉnh {clicked_node_id}", command=self.execute_deletion)
+            try: self.context_menu.tk_popup(event.x_root, event.y_root)
+            finally: self.context_menu.grab_release()
+            return
+
+        # 2. Nếu không trúng đỉnh, kiểm tra CẠNH (Edge)
+        clicked_edge = self.find_edge_at_pos(event.x, event.y)
+        if clicked_edge:
+            self.target_for_deletion = clicked_edge
+            self.delete_mode = "edge"
+            self.context_menu.delete(0, tk.END)
+            self.context_menu.add_command(label="❌ Xóa Cạnh Này", command=self.execute_deletion)
+            try: self.context_menu.tk_popup(event.x_root, event.y_root)
+            finally: self.context_menu.grab_release()
+            return
+
+        # 3. Nếu không trúng gì cả -> Pan màn hình
+        self.start_pan(event)
+
+    def execute_deletion(self):
+        if self.delete_mode == "node" and self.target_for_deletion is not None:
+            self.save_state()
+            self.graph.remove_node(self.target_for_deletion)
+            # Reset selection nếu lỡ đang chọn đúng đỉnh vừa xóa
+            if self.sel_node == self.target_for_deletion:
+                self.sel_node = None
+            self.draw()
+            
+        elif self.delete_mode == "edge" and self.target_for_deletion is not None:
+            self.save_state()
+            u, v, is_directed = self.target_for_deletion
+            self.graph.remove_edge(u, v, is_directed)
+            self.draw()
+            
+        self.target_for_deletion = None
+        self.delete_mode = None
+
+    def find_edge_at_pos(self, mx, my):
+        threshold = 10.0
+        for e in self.graph.edges:
+            u_node = self.graph.nodes[e.u]
+            v_node = self.graph.nodes[e.v]
+            sx1, sy1 = self.to_screen_x(u_node.x), self.to_screen_y(u_node.y)
+            sx2, sy2 = self.to_screen_x(v_node.x), self.to_screen_y(v_node.y)
+            dist = self.dist_point_segment(mx, my, sx1, sy1, sx2, sy2)
+            if dist < threshold:
+                return (e.u, e.v, e.is_directed)
+        return None
+
+    def dist_point_segment(self, px, py, x1, y1, x2, y2):
+        l2 = (x1-x2)**2 + (y1-y2)**2
+        if l2 == 0: return math.hypot(px-x1, py-y1)
+        t = ((px-x1)*(x2-x1) + (py-y1)*(y2-y1)) / l2
+        t = max(0, min(1, t))
+        proj_x = x1 + t*(x2-x1)
+        proj_y = y1 + t*(y2-y1)
+        return math.hypot(px-proj_x, py-proj_y)
+
+    # --- (Các hàm cũ giữ nguyên) ---
+
     def show_adv_menu(self):
-        # Cấu trúc: { "Tên Nhóm": { "Tên Thuật Toán": Hàm xử lý } }
         algo_structure = {
             "Tìm Đường Ngắn Nhất": {
                 "Dijkstra (Trọng số dương)": self.run_dijkstra,
@@ -105,13 +179,9 @@ class GraphGUI:
                 "Kiểm tra Đồ thị 2 Phía": self.run_bi
             }
         }
-        
-        # Gọi Dialog mới
         d = AlgorithmSelectorDialog(self.root, algo_structure)
-        if d.selected_func:
-            d.selected_func() # Chạy hàm được chọn
+        if d.selected_func: d.selected_func()
 
-    # --- CÁC HÀM HỖ TRỢ (GIỮ NGUYÊN) ---
     def ask_node(self, title, prompt, extra_opt=None):
         if not self.graph.nodes:
             CustomPopup(self.root, "Thông Báo", "Đồ thị chưa có đỉnh nào!\nHãy tạo đỉnh trước.", is_error=True)
@@ -121,7 +191,6 @@ class GraphGUI:
         if d.result is not None: return int(d.result), d.extra_val
         return None, False
 
-    # --- ALGORITHM RUNNERS (LOGIC CŨ VẪN DÙNG TỐT) ---
     def run_bfs(self):
         s, is_desc = self.ask_node("BFS", "Chọn Đỉnh Bắt Đầu:", extra_opt="Ưu tiên LỚN trước (Lớn->Nhỏ)")
         if s is not None:
@@ -144,7 +213,7 @@ class GraphGUI:
         e, _ = self.ask_node("Dijkstra", "Chọn Điểm Đến (End):")
         if e is None: return
         p, w = self.graph.dijkstra(s,e)
-        if p: self.hl_path_fill(p, "#e74c3c"); CustomPopup(self.root, "Kết Quả", f"Tổng quãng đường: {w}\nLộ Trình: {p}")
+        if p: self.hl_path_fill(p, "#e74c3c"); CustomPopup(self.root, "Kết Quả", f"Tổng Chi Phí: {w}\nLộ Trình: {p}")
         else: CustomPopup(self.root, "Lỗi", "Không tìm thấy đường đi!", is_error=True)
 
     def run_bellman_ford(self):
@@ -154,7 +223,7 @@ class GraphGUI:
         if e is None: return
         path, cost = self.graph.bellman_ford(s, e)
         if cost == float('-inf'): CustomPopup(self.root, "Cảnh Báo", "Phát hiện CHU TRÌNH ÂM!\nKhông thể tính đường đi ngắn nhất.", is_error=True)
-        elif path: self.hl_path_fill(path, "#e74c3c"); CustomPopup(self.root, "Kết Quả", f"Tổng quãng đường: {cost}\nLộ Trình: {path}")
+        elif path: self.hl_path_fill(path, "#e74c3c"); CustomPopup(self.root, "Kết Quả", f"Tổng Chi Phí: {cost}\nLộ Trình: {path}")
         else: CustomPopup(self.root, "Lỗi", "Không tìm thấy đường đi!", is_error=True)
 
     def run_maxflow(self):
@@ -165,50 +234,26 @@ class GraphGUI:
         f = self.graph.ford_fulkerson(s,t); CustomPopup(self.root, "Max Flow", f"Luồng Cực Đại: {f}")
 
     def run_fleury(self):
-        # Kiểm tra điều kiện Euler trước
         status, msg, auto_start_node = self.graph.get_euler_status()
-        
-        if status == 0: 
-            CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True)
-            return
-
-        # BƯỚC 1: Thông báo tính chất đồ thị TRƯỚC
-        # msg sẽ là "Đồ thị có chu trình Euler" hoặc "Đồ thị có đường đi Euler"
+        if status == 0: CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True); return
         CustomPopup(self.root, "Kiểm Tra Euler", f"Phát hiện: {msg}\n\nBấm 'Đã Hiểu' để chọn đỉnh (nếu cần) và chạy mô phỏng.")
-
-        # Logic chọn đỉnh bắt đầu (giữ nguyên)
         final_start_node = auto_start_node
-        if status == 2: # Chu trình (bắt đầu ở đâu cũng được)
+        if status == 2:
             user_choice, _ = self.ask_node("Fleury", f"Chọn Đỉnh Bắt Đầu:\n(Mặc định: {auto_start_node})")
             if user_choice is not None:
                 has_edge = any(e.u==user_choice or e.v==user_choice for e in self.graph.edges)
                 if has_edge: final_start_node = user_choice
                 else: CustomPopup(self.root, "Lỗi", f"Đỉnh {user_choice} cô lập, dùng mặc định {auto_start_node}", is_error=True)
-        
         try:
-            # Tính toán đường đi
             p = self.graph.fleury_algo(final_start_node)
-            
-            # BƯỚC 2: Visualize (Vẽ màu)
             self.hl_path_fill(p, "#f1c40f")
-            
-            # BƯỚC 3: Hiện kết quả cuối cùng
             CustomPopup(self.root, "Kết Quả Fleury", f"Lộ trình: {p}")
-        except Exception as e: 
-            CustomPopup(self.root, "Lỗi", str(e), is_error=True)
+        except Exception as e: CustomPopup(self.root, "Lỗi", str(e), is_error=True)
 
     def run_hierholzer(self):
-        # Kiểm tra điều kiện Euler trước
         status, msg, auto_start_node = self.graph.get_euler_status()
-        
-        if status == 0: 
-            CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True)
-            return
-
-        # BƯỚC 1: Thông báo tính chất đồ thị TRƯỚC
+        if status == 0: CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True); return
         CustomPopup(self.root, "Kiểm Tra Euler", f"Phát hiện: {msg}\n\nBấm 'Đã Hiểu' để chọn đỉnh (nếu cần) và chạy mô phỏng.")
-
-        # Logic chọn đỉnh bắt đầu (giữ nguyên)
         final_start_node = auto_start_node
         if status == 2:
             user_choice, _ = self.ask_node("Hierholzer", f"Chọn Đỉnh Bắt Đầu:\n(Mặc định: {auto_start_node})")
@@ -216,62 +261,39 @@ class GraphGUI:
                 has_edge = any(e.u==user_choice or e.v==user_choice for e in self.graph.edges)
                 if has_edge: final_start_node = user_choice
                 else: CustomPopup(self.root, "Lỗi", f"Đỉnh {user_choice} cô lập, dùng mặc định {auto_start_node}", is_error=True)
-        
         try:
-            # Tính toán đường đi
             p = self.graph.hierholzer_algo(final_start_node)
-            
-            # BƯỚC 2: Visualize (Vẽ màu)
             self.hl_path_fill(p, "#e67e22")
-            
-            # BƯỚC 3: Hiện kết quả cuối cùng
             CustomPopup(self.root, "Kết Quả Hierholzer", f"Lộ trình: {p}")
-        except Exception as e: 
-            CustomPopup(self.root, "Lỗi", str(e), is_error=True)
-            
-    def run_hamilton(self):
-        # 1. Kiểm tra số lượng đỉnh tối thiểu
-        if len(self.graph.nodes) < 2: # Đường đi chỉ cần >= 2 đỉnh
-            CustomPopup(self.root, "Lỗi", "Đồ thị cần ít nhất 2 đỉnh.", is_error=True)
-            return
+        except Exception as e: CustomPopup(self.root, "Lỗi", str(e), is_error=True)
 
-        # --- TRƯỜNG HỢP 1: ƯU TIÊN TÌM CHU TRÌNH (CYCLE) ---
+    def run_hamilton(self):
+        if len(self.graph.nodes) < 2:
+            CustomPopup(self.root, "Lỗi", "Đồ thị cần ít nhất 2 đỉnh.", is_error=True); return
+
         has_cycle, cycle_path = self.graph.check_hamilton()
-        
         if has_cycle:
-            CustomPopup(self.root, "Thành Công", "Tìm thấy CHU TRÌNH Hamilton!\nBấm 'Đã Hiểu' để chọn đỉnh xuất phát.")
-            
-            # Logic chọn đỉnh và xoay vòng (như cũ)
+            CustomPopup(self.root, "Thành Công", "Tìm thấy CHU TRÌNH Hamilton (Quay về đầu)!\nBấm 'Đã Hiểu' để chọn đỉnh xuất phát.")
             default_start = cycle_path[0]
             user_choice, _ = self.ask_node("Hamilton Cycle", f"Chọn Đỉnh Bắt Đầu:\n(Chu trình đi qua mọi đỉnh)")
-            
             final_path = cycle_path
             if user_choice is not None:
                 unique_nodes = cycle_path[:-1]
                 if user_choice in unique_nodes:
                     idx = unique_nodes.index(user_choice)
-                    rotated = unique_nodes[idx:] + unique_nodes[:idx]
-                    rotated.append(user_choice)
+                    rotated = unique_nodes[idx:] + unique_nodes[:idx]; rotated.append(user_choice)
                     final_path = rotated
-            
             self.hl_path_fill(final_path, "#e84393")
             CustomPopup(self.root, "Kết Quả", f"Chu trình Hamilton:\n{final_path}")
-            return # Kết thúc hàm
+            return
 
-        # --- TRƯỜNG HỢP 2: NẾU KHÔNG CÓ CHU TRÌNH -> TÌM ĐƯỜNG ĐI (PATH) ---
         has_path, path_nodes = self.graph.check_hamilton_path()
-        
         if has_path:
-            # Thông báo rõ ràng
-            CustomPopup(self.root, "Thông Báo", 
-                        "Không có Chu trình, nhưng tìm thấy Đường đi Hamilton!\n"
-                        "Lưu ý: Đường đi có điểm đầu/cuối cố định, không thể chọn đỉnh bắt đầu.")
-            
-            # Visualize ngay đường đi tìm được
-            self.hl_path_fill(path_nodes, "#fd79a8") # Màu hồng nhạt hơn chút để phân biệt
+            CustomPopup(self.root, "Thông Báo", "Không có Chu trình, nhưng tìm thấy ĐƯỜNG ĐI Hamilton!\nLưu ý: Đường đi có đầu/cuối cố định.")
+            self.hl_path_fill(path_nodes, "#fd79a8")
             CustomPopup(self.root, "Kết Quả", f"Đường đi Hamilton:\n{path_nodes}")
         else:
-            CustomPopup(self.root, "Thất Bại", "Không tồn tại Chu trình hay Đường đi Hamilton nào.", is_error=True)
+            CustomPopup(self.root, "Thất Bại", "Không tồn tại Chu trình hay Đường đi Hamilton.", is_error=True)
 
     def run_prim(self): 
         if any(e.is_directed for e in self.graph.edges): CustomPopup(self.root, "Lỗi Thuật Toán", "MST (Prim) chỉ áp dụng cho đồ thị VÔ HƯỚNG!", is_error=True); return
@@ -294,7 +316,6 @@ class GraphGUI:
             CustomPopup(self.root, "Kết Quả", "Là Đồ Thị 2 Phía")
         else: CustomPopup(self.root, "Kết Quả", "KHÔNG Phải Đồ Thị 2 Phía", is_error=True)
 
-    # --- SAVE/LOAD/UNDO/ZOOM (GIỮ NGUYÊN) ---
     def save_state(self):
         state = self.graph.to_dict(); self.history.append(state)
         if len(self.history) > 20: self.history.pop(0)

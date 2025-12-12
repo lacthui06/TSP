@@ -26,6 +26,46 @@ class Graph:
                 e.weight = w; return
         self.edges.append(Edge(u, v, w, d))
     
+    def remove_edge(self, u, v, is_directed):
+        # Lọc bỏ cạnh khớp với u, v và hướng
+        # Nếu vô hướng, ta xóa cạnh bất kể thứ tự u-v hay v-u
+        new_edges = []
+        for e in self.edges:
+            if is_directed:
+                # Nếu cạnh có hướng, phải khớp chính xác u->v
+                if e.u == u and e.v == v and e.is_directed:
+                    continue
+            else:
+                # Nếu cạnh muốn xóa là vô hướng (hoặc coi là vô hướng)
+                # Xóa nếu khớp u-v hoặc v-u
+                if (e.u == u and e.v == v) or (e.u == v and e.v == u):
+                    continue
+            new_edges.append(e)
+        self.edges = new_edges
+
+    def remove_node(self, node_id):
+        # 1. Xóa tất cả các cạnh liên quan đến node này
+        self.edges = [e for e in self.edges if e.u != node_id and e.v != node_id]
+
+        # 2. Xóa node khỏi danh sách
+        # Lưu ý: Ta giả định danh sách nodes đang được sắp xếp theo ID (do cách add_node)
+        self.nodes = [n for n in self.nodes if n.id != node_id]
+
+        # 3. QUAN TRỌNG: Đánh lại ID (Re-index)
+        # Vì các thuật toán dùng ma trận kề dựa vào index 0, 1, 2... 
+        # nên nếu xóa node 1 mà để lại node 0 và 2 thì ma trận sẽ sai.
+        # Ta cần map ID cũ sang ID mới.
+        old_to_new = {}
+        for i, n in enumerate(self.nodes):
+            old_id = n.id
+            n.id = i # Gán ID mới theo thứ tự hiện tại
+            old_to_new[old_id] = i
+
+        # 4. Cập nhật lại các cạnh còn lại theo ID mới
+        for e in self.edges:
+            if e.u in old_to_new: e.u = old_to_new[e.u]
+            if e.v in old_to_new: e.v = old_to_new[e.v]
+
     def clear(self): self.nodes=[]; self.edges=[]
     
     def to_dict(self):
