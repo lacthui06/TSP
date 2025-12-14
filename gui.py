@@ -9,11 +9,12 @@ from components import RoundedButton, CustomPopup, EdgeDialog, ComboSelectionDia
 class GraphGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("DSA Graph Master - Optimized")
+        self.root.title("DSA Graph Master")
         self.root.geometry("1600x900")
         self.root.configure(bg="#fdfdfd")
         
         self.history = [] 
+        # Binding Undo
         self.root.bind("<Control-z>", self.undo)
         self.root.bind("<Control-Z>", self.undo)
 
@@ -32,10 +33,8 @@ class GraphGUI:
 
         # Menu chuột phải
         self.context_menu = tk.Menu(self.root, tearoff=0, font=("Segoe UI", 12))
-        # Các lệnh sẽ được add động (dynamic) tùy vào click trúng cái gì
-        
-        self.target_for_deletion = None # Lưu đối tượng cần xóa (có thể là cạnh hoặc đỉnh)
-        self.delete_mode = None # "edge" hoặc "node"
+        self.target_for_deletion = None
+        self.delete_mode = None
 
         self.setup_ui()
 
@@ -51,8 +50,7 @@ class GraphGUI:
         
         def group_lbl(txt): tk.Label(sb, text=txt, bg=sb_bg, fg="#bdc3c7", font=("Segoe UI", 14, "bold")).pack(anchor="w", padx=25, pady=(20, 5))
 
-        BTN_W = 340
-        BTN_H = 55
+        BTN_W = 340; BTN_H = 55
 
         group_lbl("HỆ THỐNG")
         RoundedButton(sb, "Hoàn Tác (Ctrl+Z)", self.undo, bg_color="#e67e22", hover_color="#d35400", width=BTN_W, height=BTN_H).pack(pady=5)
@@ -78,114 +76,206 @@ class GraphGUI:
         self.cv.bind("<MouseWheel>", self.zoom_event) 
         self.cv.bind("<Button-4>", self.zoom_event)
         self.cv.bind("<Button-5>", self.zoom_event)
-        
-        # Binding chuột phải
         self.cv.bind("<Button-3>", self.on_right_click)
         self.cv.bind("<B3-Motion>", self.motion_pan)
         
-        tk.Label(main, text="🖱️ Trái: Tạo/Kéo | Phải: Menu Xóa (Click Đỉnh/Cạnh) hoặc Kéo Màn Hình | Ctrl+Z: Undo", 
+        tk.Label(main, text="🖱️ Trái: Tạo/Kéo | Phải: Menu Xóa & Kéo Màn Hình | Lăn Chuột: Zoom", 
                  bg="#fdfdfd", fg="black", font=("Segoe UI", 14, "bold")).pack(pady=10)
 
-    # --- LOGIC XỬ LÝ CHUỘT PHẢI (PAN / DELETE NODE / DELETE EDGE) ---
-    def on_right_click(self, event):
-        # Chuyển đổi tọa độ chuột sang World
-        wx = self.to_world_x(self.cv.canvasx(event.x))
-        wy = self.to_world_y(self.cv.canvasy(event.y))
-
-        # 1. Ưu tiên kiểm tra ĐỈNH (Node) trước
-        clicked_node_id = self.find_node(wx, wy)
+    # --- HÀM VẼ CHÍNH ---
+    def draw(self):
+        self.cv.delete("all")
+        self.cv.create_rectangle(-10000, -10000, 10000, 10000, fill="white", outline="white")
+        current_r = self.base_r * self.zoom_scale
+        font_size_node = int(16 * self.zoom_scale); font_size_edge = int(14 * self.zoom_scale)
+        line_width_node = max(1, 3.0 * self.zoom_scale); line_width_edge = max(1, 3.0 * self.zoom_scale); line_width_sel = max(2, 6.0 * self.zoom_scale)
         
+        existing_edges = set(); 
+        for e in self.graph.edges: existing_edges.add((e.u, e.v))
+        
+        # Vẽ Cạnh
+        for e in self.graph.edges:
+            u, v = self.graph.nodes[e.u], self.graph.nodes[e.v]
+            sx, sy = int(self.to_screen_x(u.x)), int(self.to_screen_y(u.y))
+            ex, ey = int(self.to_screen_x(v.x)), int(self.to_screen_y(v.y))
+            has_reverse = (e.v, e.u) in existing_edges and e.u != e.v
+            dx, dy = ex-sx, ey-sy; l = math.hypot(dx, dy)
+            if l == 0: continue 
+            arr = tk.LAST if e.is_directed else tk.NONE
+            arrow_shape = (16*self.zoom_scale, 20*self.zoom_scale, 8*self.zoom_scale)
+            
+            if has_reverse:
+                mx, my = (sx+ex)/2, (sy+ey)/2; offset = 40 * self.zoom_scale 
+                nx, ny = -dy/l * offset, dx/l * offset; qx, qy = mx + nx, my + ny
+                reduction = current_r + (5 * self.zoom_scale)
+                ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
+                self.cv.create_line(sx, sy, qx, qy, ex_arrow, ey_arrow, smooth=True, fill="#34495e", width=line_width_edge, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND)
+                lbl_x, lbl_y = qx, qy
+            else:
+                reduction = current_r + (5 * self.zoom_scale)
+                if e.is_directed: ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
+                else: ex_arrow, ey_arrow = ex, ey 
+                self.cv.create_line(sx, sy, ex_arrow, ey_arrow, fill="#34495e", width=line_width_edge, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND)
+                lbl_x, lbl_y = (sx+ex)/2, (sy+ey)/2
+                
+            w_txt = str(int(e.weight)) if e.weight.is_integer() else str(e.weight)
+            # Thêm tag weight_lbl để quản lý lớp vẽ
+            txt_id = self.cv.create_text(lbl_x, lbl_y, text=w_txt, fill="#e74c3c", font=("Segoe UI", font_size_edge, "bold"), tags="weight_lbl")
+            bbox = self.cv.bbox(txt_id)
+            if bbox:
+                self.cv.create_rectangle(bbox[0]-4, bbox[1]-2, bbox[2]+4, bbox[3]+2, fill="white", outline="#bdc3c7", width=1, tags="weight_lbl")
+                self.cv.tag_raise(txt_id)
+        
+        # Vẽ Đỉnh
+        for n in self.graph.nodes:
+            sx, sy = int(self.to_screen_x(n.x)), int(self.to_screen_y(n.y))
+            fill = "#2ecc71"; width = line_width_node
+            if n.id == self.sel_node: fill = "#f1c40f"; width = line_width_sel
+            self.cv.create_oval(sx - current_r, sy - current_r, sx + current_r, sy + current_r, fill=fill, outline="#27ae60", width=width, tags="node")
+            self.cv.create_text(sx, sy, text=str(n.id), font=("Segoe UI", font_size_node, "bold"), fill="white", tags="node")
+
+    # --- HIGHLIGHT PATH + RAISE TEXT ---
+    def hl_path_fill(self, p, col="#f1c40f", delay=500, draw_edges=True):
+        self.draw() # Reset
+        current_r = self.base_r * self.zoom_scale
+        line_width_sel = max(2, 6.0 * self.zoom_scale)
+        edge_width_sel = max(2, 5.0 * self.zoom_scale)
+        font_size_node = int(16 * self.zoom_scale)
+        
+        existing_edges = set()
+        for e in self.graph.edges: existing_edges.add((e.u, e.v))
+
+        for i in range(len(p)):
+            # 1. Node
+            nid = p[i]
+            n = self.graph.nodes[nid]
+            sx, sy = self.to_screen_x(n.x), self.to_screen_y(n.y)
+            
+            self.cv.create_oval(sx - current_r, sy - current_r, sx + current_r, sy + current_r, 
+                                fill=col, outline="#e67e22", width=line_width_sel, tags="highlight")
+            self.cv.create_text(sx, sy, text=str(n.id), font=("Segoe UI", font_size_node, "bold"), fill="white", tags="highlight")
+            
+            self.root.update()
+            self.root.after(delay // 2)
+
+            # 2. Edge
+            if draw_edges and i < len(p) - 1:
+                v_id = p[i+1]
+                next_n = self.graph.nodes[v_id]
+                ex, ey = self.to_screen_x(next_n.x), self.to_screen_y(next_n.y)
+                
+                dx, dy = ex-sx, ey-sy; l = math.hypot(dx, dy)
+                if l > 0:
+                    has_reverse = (v_id, nid) in existing_edges and nid != v_id
+                    is_directed = False
+                    for edge in self.graph.edges:
+                        if edge.u == nid and edge.v == v_id and edge.is_directed:
+                            is_directed = True; break
+                    arr = tk.LAST if is_directed else tk.NONE
+                    arrow_shape = (16*self.zoom_scale, 20*self.zoom_scale, 8*self.zoom_scale)
+
+                    if has_reverse:
+                        mx, my = (sx+ex)/2, (sy+ey)/2; offset = 40 * self.zoom_scale 
+                        nx, ny = -dy/l * offset, dx/l * offset; qx, qy = mx + nx, my + ny
+                        reduction = current_r + (5 * self.zoom_scale)
+                        ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
+                        
+                        self.cv.create_line(sx, sy, qx, qy, ex_arrow, ey_arrow, smooth=True, 
+                                            fill=col, width=edge_width_sel, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND, tags="highlight_edge")
+                    else:
+                        reduction = current_r + (5 * self.zoom_scale)
+                        if is_directed: ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
+                        else: ex_arrow, ey_arrow = ex, ey 
+                        
+                        self.cv.create_line(sx, sy, ex_arrow, ey_arrow, 
+                                            fill=col, width=edge_width_sel, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND, tags="highlight_edge")
+                    
+                    # Đẩy text trọng số và node lên trên cùng để không bị che
+                    self.cv.tag_raise("weight_lbl")
+                    self.cv.tag_raise("highlight") 
+                    
+                    self.root.update()
+                    self.root.after(delay // 2)
+    
+    # --- HIGHLIGHT MST ---
+    def hl_edge(self, elist, col="#9b59b6"):
+        self.draw()
+        edge_width_sel = max(2, 6.0 * self.zoom_scale)
+        for e in elist:
+            u,v = self.graph.nodes[e.u], self.graph.nodes[e.v]; sx, sy = self.to_screen_x(u.x), self.to_screen_y(u.y); ex, ey = self.to_screen_x(v.x), self.to_screen_y(v.y)
+            arr = tk.LAST if e.is_directed else tk.NONE
+            dx, dy = ex-sx, ey-sy; l = math.hypot(dx,dy); current_r = self.base_r * self.zoom_scale
+            if l>0: 
+                reduction = current_r + (2 * self.zoom_scale)
+                if e.is_directed: ex -= (dx/l)*reduction; ey -= (dy/l)*reduction
+                self.cv.create_line(sx, sy, ex, ey, fill=col, width=edge_width_sel, arrow=arr, capstyle=tk.ROUND, tags="highlight_edge")
+            
+            self.cv.tag_raise("weight_lbl")
+            self.cv.tag_raise("node")
+            self.root.update(); self.root.after(300)
+
+    # --- EVENTS ---
+    def on_right_click(self, event):
+        wx = self.to_world_x(self.cv.canvasx(event.x)); wy = self.to_world_y(self.cv.canvasy(event.y))
+        
+        clicked_node_id = self.find_node(wx, wy)
         if clicked_node_id is not None:
-            self.target_for_deletion = clicked_node_id
-            self.delete_mode = "node"
-            self.context_menu.delete(0, tk.END) # Xóa menu cũ
+            self.target_for_deletion = clicked_node_id; self.delete_mode = "node"
+            self.context_menu.delete(0, tk.END)
             self.context_menu.add_command(label=f"❌ Xóa Đỉnh {clicked_node_id}", command=self.execute_deletion)
             try: self.context_menu.tk_popup(event.x_root, event.y_root)
             finally: self.context_menu.grab_release()
             return
 
-        # 2. Nếu không trúng đỉnh, kiểm tra CẠNH (Edge)
         clicked_edge = self.find_edge_at_pos(event.x, event.y)
         if clicked_edge:
-            self.target_for_deletion = clicked_edge
-            self.delete_mode = "edge"
+            self.target_for_deletion = clicked_edge; self.delete_mode = "edge"
             self.context_menu.delete(0, tk.END)
             self.context_menu.add_command(label="❌ Xóa Cạnh Này", command=self.execute_deletion)
             try: self.context_menu.tk_popup(event.x_root, event.y_root)
             finally: self.context_menu.grab_release()
             return
 
-        # 3. Nếu không trúng gì cả -> Pan màn hình
         self.start_pan(event)
 
     def execute_deletion(self):
         if self.delete_mode == "node" and self.target_for_deletion is not None:
-            self.save_state()
-            self.graph.remove_node(self.target_for_deletion)
-            # Reset selection nếu lỡ đang chọn đúng đỉnh vừa xóa
-            if self.sel_node == self.target_for_deletion:
-                self.sel_node = None
+            self.save_state(); self.graph.remove_node(self.target_for_deletion)
+            if self.sel_node == self.target_for_deletion: self.sel_node = None
             self.draw()
-            
         elif self.delete_mode == "edge" and self.target_for_deletion is not None:
-            self.save_state()
-            u, v, is_directed = self.target_for_deletion
-            self.graph.remove_edge(u, v, is_directed)
-            self.draw()
-            
-        self.target_for_deletion = None
-        self.delete_mode = None
+            self.save_state(); u, v, is_directed = self.target_for_deletion
+            self.graph.remove_edge(u, v, is_directed); self.draw()
+        self.target_for_deletion = None; self.delete_mode = None
 
     def find_edge_at_pos(self, mx, my):
         threshold = 10.0
         for e in self.graph.edges:
-            u_node = self.graph.nodes[e.u]
-            v_node = self.graph.nodes[e.v]
+            u_node = self.graph.nodes[e.u]; v_node = self.graph.nodes[e.v]
             sx1, sy1 = self.to_screen_x(u_node.x), self.to_screen_y(u_node.y)
             sx2, sy2 = self.to_screen_x(v_node.x), self.to_screen_y(v_node.y)
-            dist = self.dist_point_segment(mx, my, sx1, sy1, sx2, sy2)
-            if dist < threshold:
-                return (e.u, e.v, e.is_directed)
+            if self.dist_point_segment(mx, my, sx1, sy1, sx2, sy2) < threshold: return (e.u, e.v, e.is_directed)
         return None
 
     def dist_point_segment(self, px, py, x1, y1, x2, y2):
         l2 = (x1-x2)**2 + (y1-y2)**2
         if l2 == 0: return math.hypot(px-x1, py-y1)
         t = ((px-x1)*(x2-x1) + (py-y1)*(y2-y1)) / l2
-        t = max(0, min(1, t))
-        proj_x = x1 + t*(x2-x1)
-        proj_y = y1 + t*(y2-y1)
+        t = max(0, min(1, t)); proj_x = x1 + t*(x2-x1); proj_y = y1 + t*(y2-y1)
         return math.hypot(px-proj_x, py-proj_y)
-
-    # --- (Các hàm cũ giữ nguyên) ---
 
     def show_adv_menu(self):
         algo_structure = {
-            "Tìm Đường Ngắn Nhất": {
-                "Dijkstra (Trọng số dương)": self.run_dijkstra,
-                "Bellman-Ford (Xử lý âm)": self.run_bellman_ford
-            },
-            "Cây Khung Nhỏ Nhất (MST)": {
-                "Thuật toán Prim": self.run_prim,
-                "Thuật toán Kruskal": self.run_kruskal
-            },
-            "Chu Trình Euler & Hamilton": {
-                "Fleury (Euler)": self.run_fleury,
-                "Hierholzer (Euler)": self.run_hierholzer,
-                "Kiểm tra Hamilton": self.run_hamilton
-            },
-            "Luồng & Phân Tích Khác": {
-                "Luồng Cực Đại (Max Flow)": self.run_maxflow,
-                "Kiểm tra Đồ thị 2 Phía": self.run_bi
-            }
+            "Tìm Đường Ngắn Nhất": {"Dijkstra (Trọng số dương)": self.run_dijkstra, "Bellman-Ford (Xử lý âm)": self.run_bellman_ford},
+            "Cây Khung Nhỏ Nhất (MST)": {"Thuật toán Prim": self.run_prim, "Thuật toán Kruskal": self.run_kruskal},
+            "Chu Trình Euler & Hamilton": {"Fleury (Euler)": self.run_fleury, "Hierholzer (Euler)": self.run_hierholzer, "Kiểm tra Hamilton": self.run_hamilton},
+            "Luồng & Phân Tích Khác": {"Luồng Cực Đại (Max Flow)": self.run_maxflow, "Kiểm tra Đồ thị 2 Phía": self.run_bi}
         }
         d = AlgorithmSelectorDialog(self.root, algo_structure)
         if d.selected_func: d.selected_func()
 
     def ask_node(self, title, prompt, extra_opt=None):
-        if not self.graph.nodes:
-            CustomPopup(self.root, "Thông Báo", "Đồ thị chưa có đỉnh nào!\nHãy tạo đỉnh trước.", is_error=True)
-            return None, False
+        if not self.graph.nodes: CustomPopup(self.root, "Thông Báo", "Đồ thị chưa có đỉnh nào!", is_error=True); return None, False
         choices = [str(n.id) for n in self.graph.nodes]
         d = ComboSelectionDialog(self.root, title, prompt, choices, extra_option=extra_opt)
         if d.result is not None: return int(d.result), d.extra_val
@@ -196,18 +286,19 @@ class GraphGUI:
         if s is not None:
             p = self.graph.bfs(s, descending=is_desc)
             desc_text = "Lớn -> Nhỏ" if is_desc else "Nhỏ -> Lớn"
-            self.hl_path_fill(p); CustomPopup(self.root, "Kết Quả BFS", f"Thứ tự ({desc_text}):\n{p}")
+            self.hl_path_fill(p, draw_edges=False) 
+            CustomPopup(self.root, "Kết Quả BFS", f"Thứ tự ({desc_text}):\n{p}")
 
     def run_dfs(self):
         s, is_desc = self.ask_node("DFS", "Chọn Đỉnh Bắt Đầu:", extra_opt="Ưu tiên LỚN trước (Lớn->Nhỏ)")
         if s is not None:
             p = self.graph.dfs(s, descending=is_desc)
             desc_text = "Lớn -> Nhỏ" if is_desc else "Nhỏ -> Lớn"
-            self.hl_path_fill(p); CustomPopup(self.root, "Kết Quả DFS", f"Thứ tự ({desc_text}):\n{p}")
+            self.hl_path_fill(p, draw_edges=False)
+            CustomPopup(self.root, "Kết Quả DFS", f"Thứ tự ({desc_text}):\n{p}")
 
     def run_dijkstra(self):
-        if any(e.weight < 0 for e in self.graph.edges):
-            CustomPopup(self.root, "Lỗi Thuật Toán", "Dijkstra KHÔNG hoạt động với trọng số ÂM!", is_error=True); return
+        if any(e.weight < 0 for e in self.graph.edges): CustomPopup(self.root, "Lỗi Thuật Toán", "Dijkstra KHÔNG hoạt động với trọng số ÂM!", is_error=True); return
         s, _ = self.ask_node("Dijkstra", "Chọn Điểm Đi (Start):")
         if s is None: return
         e, _ = self.ask_node("Dijkstra", "Chọn Điểm Đến (End):")
@@ -227,80 +318,54 @@ class GraphGUI:
         else: CustomPopup(self.root, "Lỗi", "Không tìm thấy đường đi!", is_error=True)
 
     def run_maxflow(self):
-        s, _ = self.ask_node("Flow", "Chọn Nguồn (Source):")
+        s, _ = self.ask_node("Flow", "Chọn Nguồn (Source):"); 
         if s is None: return
         t, _ = self.ask_node("Flow", "Chọn Đích (Sink):")
         if t is None: return
         f = self.graph.ford_fulkerson(s,t); CustomPopup(self.root, "Max Flow", f"Luồng Cực Đại: {f}")
 
     def run_fleury(self):
-        status, msg, auto_start_node = self.graph.get_euler_status()
+        status, msg, auto = self.graph.get_euler_status()
         if status == 0: CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True); return
         CustomPopup(self.root, "Kiểm Tra Euler", f"Phát hiện: {msg}\n\nBấm 'Đã Hiểu' để chọn đỉnh (nếu cần) và chạy mô phỏng.")
-        final_start_node = auto_start_node
+        start = auto
         if status == 2:
-            user_choice, _ = self.ask_node("Fleury", f"Chọn Đỉnh Bắt Đầu:\n(Mặc định: {auto_start_node})")
-            if user_choice is not None:
-                has_edge = any(e.u==user_choice or e.v==user_choice for e in self.graph.edges)
-                if has_edge: final_start_node = user_choice
-                else: CustomPopup(self.root, "Lỗi", f"Đỉnh {user_choice} cô lập, dùng mặc định {auto_start_node}", is_error=True)
-        try:
-            p = self.graph.fleury_algo(final_start_node)
-            self.hl_path_fill(p, "#f1c40f")
-            CustomPopup(self.root, "Kết Quả Fleury", f"Lộ trình: {p}")
+            u, _ = self.ask_node("Fleury", f"Chọn Đỉnh Bắt Đầu:\n(Mặc định: {auto})")
+            if u is not None: start = u
+        try: p = self.graph.fleury_algo(start); self.hl_path_fill(p, "#f1c40f"); CustomPopup(self.root, "Kết Quả Fleury", f"Lộ trình: {p}")
         except Exception as e: CustomPopup(self.root, "Lỗi", str(e), is_error=True)
 
     def run_hierholzer(self):
-        status, msg, auto_start_node = self.graph.get_euler_status()
+        status, msg, auto = self.graph.get_euler_status()
         if status == 0: CustomPopup(self.root, "Không thể chạy", f"Lý do: {msg}", is_error=True); return
         CustomPopup(self.root, "Kiểm Tra Euler", f"Phát hiện: {msg}\n\nBấm 'Đã Hiểu' để chọn đỉnh (nếu cần) và chạy mô phỏng.")
-        final_start_node = auto_start_node
+        start = auto
         if status == 2:
-            user_choice, _ = self.ask_node("Hierholzer", f"Chọn Đỉnh Bắt Đầu:\n(Mặc định: {auto_start_node})")
-            if user_choice is not None:
-                has_edge = any(e.u==user_choice or e.v==user_choice for e in self.graph.edges)
-                if has_edge: final_start_node = user_choice
-                else: CustomPopup(self.root, "Lỗi", f"Đỉnh {user_choice} cô lập, dùng mặc định {auto_start_node}", is_error=True)
-        try:
-            p = self.graph.hierholzer_algo(final_start_node)
-            self.hl_path_fill(p, "#e67e22")
-            CustomPopup(self.root, "Kết Quả Hierholzer", f"Lộ trình: {p}")
+            u, _ = self.ask_node("Hierholzer", f"Chọn Đỉnh Bắt Đầu:\n(Mặc định: {auto})")
+            if u is not None: start = u
+        try: p = self.graph.hierholzer_algo(start); self.hl_path_fill(p, "#e67e22"); CustomPopup(self.root, "Kết Quả Hierholzer", f"Lộ trình: {p}")
         except Exception as e: CustomPopup(self.root, "Lỗi", str(e), is_error=True)
 
     def run_hamilton(self):
-        if len(self.graph.nodes) < 2:
-            CustomPopup(self.root, "Lỗi", "Đồ thị cần ít nhất 2 đỉnh.", is_error=True); return
-
-        has_cycle, cycle_path = self.graph.check_hamilton()
-        if has_cycle:
-            CustomPopup(self.root, "Thành Công", "Tìm thấy CHU TRÌNH Hamilton (Quay về đầu)!\nBấm 'Đã Hiểu' để chọn đỉnh xuất phát.")
-            default_start = cycle_path[0]
-            user_choice, _ = self.ask_node("Hamilton Cycle", f"Chọn Đỉnh Bắt Đầu:\n(Chu trình đi qua mọi đỉnh)")
-            final_path = cycle_path
-            if user_choice is not None:
-                unique_nodes = cycle_path[:-1]
-                if user_choice in unique_nodes:
-                    idx = unique_nodes.index(user_choice)
-                    rotated = unique_nodes[idx:] + unique_nodes[:idx]; rotated.append(user_choice)
-                    final_path = rotated
-            self.hl_path_fill(final_path, "#e84393")
-            CustomPopup(self.root, "Kết Quả", f"Chu trình Hamilton:\n{final_path}")
-            return
-
-        has_path, path_nodes = self.graph.check_hamilton_path()
-        if has_path:
-            CustomPopup(self.root, "Thông Báo", "Không có Chu trình, nhưng tìm thấy ĐƯỜNG ĐI Hamilton!\nLưu ý: Đường đi có đầu/cuối cố định.")
-            self.hl_path_fill(path_nodes, "#fd79a8")
-            CustomPopup(self.root, "Kết Quả", f"Đường đi Hamilton:\n{path_nodes}")
-        else:
-            CustomPopup(self.root, "Thất Bại", "Không tồn tại Chu trình hay Đường đi Hamilton.", is_error=True)
+        if len(self.graph.nodes) < 2: CustomPopup(self.root, "Lỗi", "Đồ thị cần ít nhất 2 đỉnh.", is_error=True); return
+        hc, cp = self.graph.check_hamilton()
+        if hc:
+            CustomPopup(self.root, "Thành Công", "Tìm thấy CHU TRÌNH Hamilton!\nBấm 'Đã Hiểu' để chọn đỉnh xuất phát.")
+            u, _ = self.ask_node("Hamilton", "Chọn Đỉnh Bắt Đầu:")
+            fp = cp
+            if u is not None and u in cp[:-1]:
+                idx = cp[:-1].index(u); fp = cp[:-1][idx:] + cp[:-1][:idx]; fp.append(u)
+            self.hl_path_fill(fp, "#e84393"); CustomPopup(self.root, "Kết Quả", f"Chu trình: {fp}"); return
+        hp, pp = self.graph.check_hamilton_path()
+        if hp: CustomPopup(self.root, "Thông Báo", "Có ĐƯỜNG ĐI Hamilton."); self.hl_path_fill(pp, "#fd79a8"); CustomPopup(self.root, "Kết Quả", f"Đường đi: {pp}")
+        else: CustomPopup(self.root, "Thất Bại", "Không có Hamilton.", is_error=True)
 
     def run_prim(self): 
-        if any(e.is_directed for e in self.graph.edges): CustomPopup(self.root, "Lỗi Thuật Toán", "MST (Prim) chỉ áp dụng cho đồ thị VÔ HƯỚNG!", is_error=True); return
+        if any(e.is_directed for e in self.graph.edges): CustomPopup(self.root, "Lỗi", "MST chỉ áp dụng cho VÔ HƯỚNG!", is_error=True); return
         e,w=self.graph.prim(); self.hl_edge(e, "#3498db"); CustomPopup(self.root, "Prim MST", f"Tổng Trọng Số: {w}")
 
     def run_kruskal(self):
-        if any(e.is_directed for e in self.graph.edges): CustomPopup(self.root, "Lỗi Thuật Toán", "MST (Kruskal) chỉ áp dụng cho đồ thị VÔ HƯỚNG!", is_error=True); return
+        if any(e.is_directed for e in self.graph.edges): CustomPopup(self.root, "Lỗi", "MST chỉ áp dụng cho VÔ HƯỚNG!", is_error=True); return
         e,w=self.graph.kruskal(); self.hl_edge(e, "#9b59b6"); CustomPopup(self.root, "Kruskal MST", f"Tổng Trọng Số: {w}")
 
     def run_bi(self):
@@ -320,21 +385,19 @@ class GraphGUI:
         state = self.graph.to_dict(); self.history.append(state)
         if len(self.history) > 20: self.history.pop(0)
 
+    # --- ĐÂY LÀ HÀM UNDO BẠN CẦN ---
     def undo(self, event=None):
-        if not self.history: CustomPopup(self.root, "Thông báo", "Không còn thao tác nào để quay lại!"); return
+        if not self.history: CustomPopup(self.root, "Thông báo", "Không có gì để Undo!"); return
         last_state = self.history.pop(); self.graph.from_dict(last_state); self.sel_node = None; self.draw()
 
     def zoom_event(self, event):
-        if event.num == 5 or event.delta < 0: scale_factor = 0.9 
-        else: scale_factor = 1.1 
+        scale_factor = 0.9 if (event.num == 5 or event.delta < 0) else 1.1
         new_zoom = self.zoom_scale * scale_factor
         if new_zoom < 0.2 or new_zoom > 5.0: return
-        mouse_x = self.cv.canvasx(event.x); mouse_y = self.cv.canvasy(event.y)
-        world_x = (mouse_x / self.zoom_scale) - self.offset_x
-        world_y = (mouse_y / self.zoom_scale) - self.offset_y
+        mx = self.cv.canvasx(event.x); my = self.cv.canvasy(event.y)
+        wx = (mx / self.zoom_scale) - self.offset_x; wy = (my / self.zoom_scale) - self.offset_y
         self.zoom_scale = new_zoom
-        self.offset_x = (mouse_x / self.zoom_scale) - world_x
-        self.offset_y = (mouse_y / self.zoom_scale) - world_y
+        self.offset_x = (mx / self.zoom_scale) - wx; self.offset_y = (my / self.zoom_scale) - wy
         self.draw()
 
     def start_pan(self, event): self.last_mouse_x = event.x; self.last_mouse_y = event.y
@@ -350,88 +413,27 @@ class GraphGUI:
         else: self.save_state(); self.graph.add_node(wx, wy); self.draw(); self.sel_node=None
             
     def drag(self, e):
-        if self.drag_node is not None: 
-            self.is_drag=True; n=self.graph.nodes[self.drag_node]
+        if self.drag_node is not None:
+            self.is_drag = True; n = self.graph.nodes[self.drag_node]
             n.x = self.to_world_x(self.cv.canvasx(e.x)); n.y = self.to_world_y(self.cv.canvasy(e.y)); self.draw()
             
     def up(self, e):
-        if self.is_drag: self.drag_node=None; self.is_drag=False; return
+        if self.is_drag: self.drag_node = None; self.is_drag = False; return
         wx = self.to_world_x(self.cv.canvasx(e.x)); wy = self.to_world_y(self.cv.canvasy(e.y))
         nid = self.find_node(wx, wy)
         if nid is not None:
-            if self.sel_node is None: self.sel_node=nid; self.draw()
-            elif self.sel_node!=nid:
-                d=EdgeDialog(self.root, self.sel_node, nid)
+            if self.sel_node is None: self.sel_node = nid; self.draw()
+            elif self.sel_node != nid:
+                d = EdgeDialog(self.root, self.sel_node, nid)
                 if d.result: self.save_state(); self.graph.add_edge(self.sel_node, nid, d.result[0], d.result[1])
-                self.sel_node=None; self.draw()
-        else: self.sel_node=None; self.draw()
-        self.drag_node=None; self.is_drag=False
+                self.sel_node = None; self.draw()
+        else: self.sel_node = None; self.draw()
+        self.drag_node = None; self.is_drag = False
 
     def find_node(self, wx, wy):
         for n in self.graph.nodes:
             if math.hypot(n.x - wx, n.y - wy) < self.base_r + 5: return n.id
         return None
-
-    def draw(self):
-        self.cv.delete("all"); self.cv.create_rectangle(-10000, -10000, 10000, 10000, fill="white", outline="white")
-        current_r = self.base_r * self.zoom_scale
-        font_size_node = int(16 * self.zoom_scale); font_size_edge = int(14 * self.zoom_scale)
-        line_width_node = max(1, 3.0 * self.zoom_scale); line_width_edge = max(1, 3.0 * self.zoom_scale); line_width_sel = max(2, 6.0 * self.zoom_scale)
-        existing_edges = set(); 
-        for e in self.graph.edges: existing_edges.add((e.u, e.v))
-        for e in self.graph.edges:
-            u, v = self.graph.nodes[e.u], self.graph.nodes[e.v]
-            sx, sy = int(self.to_screen_x(u.x)), int(self.to_screen_y(u.y))
-            ex, ey = int(self.to_screen_x(v.x)), int(self.to_screen_y(v.y))
-            has_reverse = (e.v, e.u) in existing_edges and e.u != e.v
-            dx, dy = ex-sx, ey-sy; l = math.hypot(dx, dy)
-            if l == 0: continue 
-            arr = tk.LAST if e.is_directed else tk.NONE
-            arrow_shape = (16*self.zoom_scale, 20*self.zoom_scale, 8*self.zoom_scale)
-            if has_reverse:
-                mx, my = (sx+ex)/2, (sy+ey)/2; offset = 40 * self.zoom_scale 
-                nx, ny = -dy/l * offset, dx/l * offset; qx, qy = mx + nx, my + ny
-                reduction = current_r + (5 * self.zoom_scale)
-                ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
-                self.cv.create_line(sx, sy, qx, qy, ex_arrow, ey_arrow, smooth=True, fill="#34495e", width=line_width_edge, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND)
-                lbl_x, lbl_y = qx, qy
-            else:
-                reduction = current_r + (5 * self.zoom_scale)
-                if e.is_directed: ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
-                else: ex_arrow, ey_arrow = ex, ey 
-                self.cv.create_line(sx, sy, ex_arrow, ey_arrow, fill="#34495e", width=line_width_edge, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND)
-                lbl_x, lbl_y = (sx+ex)/2, (sy+ey)/2
-            w_txt = str(int(e.weight)) if e.weight.is_integer() else str(e.weight)
-            txt_id = self.cv.create_text(lbl_x, lbl_y, text=w_txt, fill="#e74c3c", font=("Segoe UI", font_size_edge, "bold"))
-            bbox = self.cv.bbox(txt_id)
-            if bbox:
-                self.cv.create_rectangle(bbox[0]-4, bbox[1]-2, bbox[2]+4, bbox[3]+2, fill="white", outline="#bdc3c7", width=1)
-                self.cv.tag_raise(txt_id)
-        for n in self.graph.nodes:
-            sx, sy = int(self.to_screen_x(n.x)), int(self.to_screen_y(n.y))
-            fill = "#2ecc71"; width = line_width_node
-            if n.id == self.sel_node: fill = "#f1c40f"; width = line_width_sel
-            self.cv.create_oval(sx - current_r, sy - current_r, sx + current_r, sy + current_r, fill=fill, outline="#27ae60", width=width)
-            self.cv.create_text(sx, sy, text=str(n.id), font=("Segoe UI", font_size_node, "bold"), fill="white")
-
-    def hl_path_fill(self, p, col="#f1c40f", delay=500):
-        self.draw(); current_r = self.base_r * self.zoom_scale; line_width_sel = max(2, 6.0 * self.zoom_scale); font_size_node = int(16 * self.zoom_scale)
-        for nid in p:
-            n = self.graph.nodes[nid]; sx, sy = self.to_screen_x(n.x), self.to_screen_y(n.y)
-            self.cv.create_oval(sx - current_r, sy - current_r, sx + current_r, sy + current_r, fill=col, outline="#e67e22", width=line_width_sel)
-            self.cv.create_text(sx, sy, text=str(n.id), font=("Segoe UI", font_size_node, "bold"), fill="white")
-            self.root.update(); self.root.after(delay)
-    
-    def hl_edge(self, elist, col="#9b59b6"):
-        self.draw()
-        for e in elist:
-            u,v = self.graph.nodes[e.u], self.graph.nodes[e.v]; sx, sy = self.to_screen_x(u.x), self.to_screen_y(u.y); ex, ey = self.to_screen_x(v.x), self.to_screen_y(v.y)
-            arr = tk.LAST if e.is_directed else tk.NONE
-            if e.is_directed:
-                dx, dy = ex-sx, ey-sy; l = math.hypot(dx,dy); current_r = self.base_r * self.zoom_scale
-                if l>0: ex -= (dx/l)*(current_r+5); ey -= (dy/l)*(current_r+5)
-            self.cv.create_line(sx, sy, ex, ey, fill=col, width=max(2, 7.0*self.zoom_scale), arrow=arr, capstyle=tk.ROUND)
-            self.root.update(); self.root.after(300)
 
     def save(self):
         f=filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON","*.json")]); 

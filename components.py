@@ -180,7 +180,7 @@ class RoundedButton(tk.Canvas):
     def on_leave(self, event): self.draw_button(self.bg_color)
 
 # =======================================================================================
-# EDGE INPUT DIALOG
+# EDGE INPUT DIALOG - DEFAULT UNCHECKED (VÔ HƯỚNG) & BIG BUTTONS
 # =======================================================================================
 class EdgeDialog(tk.Toplevel):
     def __init__(self, parent, u, v):

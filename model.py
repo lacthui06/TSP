@@ -27,41 +27,21 @@ class Graph:
         self.edges.append(Edge(u, v, w, d))
     
     def remove_edge(self, u, v, is_directed):
-        # Lọc bỏ cạnh khớp với u, v và hướng
-        # Nếu vô hướng, ta xóa cạnh bất kể thứ tự u-v hay v-u
         new_edges = []
         for e in self.edges:
             if is_directed:
-                # Nếu cạnh có hướng, phải khớp chính xác u->v
-                if e.u == u and e.v == v and e.is_directed:
-                    continue
+                if e.u == u and e.v == v and e.is_directed: continue
             else:
-                # Nếu cạnh muốn xóa là vô hướng (hoặc coi là vô hướng)
-                # Xóa nếu khớp u-v hoặc v-u
-                if (e.u == u and e.v == v) or (e.u == v and e.v == u):
-                    continue
+                if (e.u == u and e.v == v) or (e.u == v and e.v == u): continue
             new_edges.append(e)
         self.edges = new_edges
 
     def remove_node(self, node_id):
-        # 1. Xóa tất cả các cạnh liên quan đến node này
         self.edges = [e for e in self.edges if e.u != node_id and e.v != node_id]
-
-        # 2. Xóa node khỏi danh sách
-        # Lưu ý: Ta giả định danh sách nodes đang được sắp xếp theo ID (do cách add_node)
         self.nodes = [n for n in self.nodes if n.id != node_id]
-
-        # 3. QUAN TRỌNG: Đánh lại ID (Re-index)
-        # Vì các thuật toán dùng ma trận kề dựa vào index 0, 1, 2... 
-        # nên nếu xóa node 1 mà để lại node 0 và 2 thì ma trận sẽ sai.
-        # Ta cần map ID cũ sang ID mới.
         old_to_new = {}
         for i, n in enumerate(self.nodes):
-            old_id = n.id
-            n.id = i # Gán ID mới theo thứ tự hiện tại
-            old_to_new[old_id] = i
-
-        # 4. Cập nhật lại các cạnh còn lại theo ID mới
+            old_id = n.id; n.id = i; old_to_new[old_id] = i
         for e in self.edges:
             if e.u in old_to_new: e.u = old_to_new[e.u]
             if e.v in old_to_new: e.v = old_to_new[e.v]
@@ -93,7 +73,6 @@ class Graph:
         return mat
 
     # --- ALGORITHMS ---
-    
     def bfs(self, s, descending=False):
         if s is None or s >= len(self.nodes): return []
         adj = self.get_adj() 
@@ -219,16 +198,13 @@ class Graph:
         adj = self.get_adj()
         visited = [False] * n
         path = []
-
         def is_safe(v, pos, path):
-            u = path[pos-1]
-            is_adjacent = False
+            u = path[pos-1]; is_adjacent = False
             for neighbor, _ in adj[u]:
                 if neighbor == v: is_adjacent = True; break
             if not is_adjacent: return False
             if visited[v]: return False
             return True
-
         def ham_path_util(pos):
             if pos == n: return True
             for v in range(n):
@@ -237,7 +213,6 @@ class Graph:
                     if ham_path_util(pos + 1): return True
                     visited[v] = False; path.pop()
             return False
-
         for start_node in range(n):
             path = [start_node]; visited = [False] * n; visited[start_node] = True
             if ham_path_util(1): return True, path
@@ -285,84 +260,41 @@ class Graph:
             elif len(odd_nodes) == 2: return 1, "Đồ thị VÔ HƯỚNG: Đường đi Euler", odd_nodes[0]
             else: return 0, f"Đồ thị VÔ HƯỚNG: Không Euler ({len(odd_nodes)} lẻ)", None
 
-    # --- FLEURY ALGORITHM (GREEDY REACHABILITY FIX) ---
     def fleury_algo(self, start_node):
         is_directed_graph = any(e.is_directed for e in self.edges)
-        
-        # Tạo bản sao danh sách kề
         adj = defaultdict(list)
         for e in self.edges:
             adj[e.u].append(e.v)
-            if not is_directed_graph and not e.is_directed:
-                adj[e.v].append(e.u)
-            elif is_directed_graph and not e.is_directed:
-                adj[e.v].append(e.u)
-
-        # Hàm BFS đếm số lượng đỉnh có thể đến được từ start_node
-        # Dùng để kiểm tra: Nếu đi đường này thì "tương lai" rộng mở thế nào?
+            if not is_directed_graph and not e.is_directed: adj[e.v].append(e.u)
+            elif is_directed_graph and not e.is_directed: adj[e.v].append(e.u)
         def count_reachable(start, current_adj):
-            if start not in current_adj and not any(start in vals for vals in current_adj.values()):
-                return 0
-            vis = set([start])
-            q = deque([start])
-            count = 0
+            if start not in current_adj and not any(start in vals for vals in current_adj.values()): return 0
+            vis = set([start]); q = deque([start]); count = 0
             while q:
-                u = q.popleft()
-                count += 1
+                u = q.popleft(); count += 1
                 if u in current_adj:
                     for v in current_adj[u]:
-                        if v not in vis:
-                            vis.add(v)
-                            q.append(v)
+                        if v not in vis: vis.add(v); q.append(v)
             return count
-
-        path = [start_node]
-        curr = start_node
-        
+        path = [start_node]; curr = start_node
         while adj[curr]:
             candidates = adj[curr]
-            
-            # Nếu chỉ có 1 đường, bắt buộc phải đi
-            if len(candidates) == 1:
-                chosen_v = candidates[0]
+            if len(candidates) == 1: chosen_v = candidates[0]
             else:
-                # Nếu có nhiều đường, thử đi từng đường và xem
-                # đường nào dẫn đến nơi có thể tiếp cận NHIỀU đỉnh nhất (Max Reachability)
-                best_v = -1
-                max_reach = -1
-                
-                # Copy candidates ra list mới để không bị lỗi khi loop
+                best_v = -1; max_reach = -1
                 for v in list(candidates):
-                    # Thử xóa cạnh curr -> v
                     adj[curr].remove(v)
-                    if not is_directed_graph:
-                        adj[v].remove(curr)
-                    
-                    # QUAN TRỌNG: Đếm số đỉnh đến được TỪ V (Đích đến)
-                    # Logic: Ta muốn đi đến nơi mà từ đó ta có thể đi được nhiều nơi nhất
-                    # thay vì chui vào ngõ cụt.
+                    if not is_directed_graph: adj[v].remove(curr)
                     c = count_reachable(v, adj)
-                    
-                    # Trả lại cạnh
                     adj[curr].append(v)
-                    if not is_directed_graph:
-                        adj[v].append(curr)
-                    
-                    if c > max_reach:
-                        max_reach = c
-                        best_v = v
-                
+                    if not is_directed_graph: adj[v].append(curr)
+                    if c > max_reach: max_reach = c; best_v = v
                 chosen_v = best_v if best_v != -1 else candidates[0]
-
-            # Thực hiện nước đi chính thức
             adj[curr].remove(chosen_v)
             if not is_directed_graph:
                 try: adj[chosen_v].remove(curr)
                 except ValueError: pass
-                
-            path.append(chosen_v)
-            curr = chosen_v
-            
+            path.append(chosen_v); curr = chosen_v
         return path
 
     def hierholzer_algo(self, start_node):
