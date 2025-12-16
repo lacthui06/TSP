@@ -14,7 +14,6 @@ class GraphGUI:
         self.root.configure(bg="#fdfdfd")
         
         self.history = [] 
-        # Binding Undo
         self.root.bind("<Control-z>", self.undo)
         self.root.bind("<Control-Z>", self.undo)
 
@@ -82,7 +81,7 @@ class GraphGUI:
         tk.Label(main, text="🖱️ Trái: Tạo/Kéo | Phải: Menu Xóa & Kéo Màn Hình | Lăn Chuột: Zoom", 
                  bg="#fdfdfd", fg="black", font=("Segoe UI", 14, "bold")).pack(pady=10)
 
-    # --- HÀM VẼ CHÍNH ---
+    # --- HÀM VẼ CHÍNH (CHỈ VẼ ĐƯỜNG THẲNG) ---
     def draw(self):
         self.cv.delete("all")
         self.cv.create_rectangle(-10000, -10000, 10000, 10000, fill="white", outline="white")
@@ -90,33 +89,30 @@ class GraphGUI:
         font_size_node = int(16 * self.zoom_scale); font_size_edge = int(14 * self.zoom_scale)
         line_width_node = max(1, 3.0 * self.zoom_scale); line_width_edge = max(1, 3.0 * self.zoom_scale); line_width_sel = max(2, 6.0 * self.zoom_scale)
         
-        existing_edges = set(); 
-        for e in self.graph.edges: existing_edges.add((e.u, e.v))
-        
-        # Vẽ Cạnh
+        # Vẽ Cạnh (Luôn là đường thẳng)
         for e in self.graph.edges:
             u, v = self.graph.nodes[e.u], self.graph.nodes[e.v]
             sx, sy = int(self.to_screen_x(u.x)), int(self.to_screen_y(u.y))
             ex, ey = int(self.to_screen_x(v.x)), int(self.to_screen_y(v.y))
-            has_reverse = (e.v, e.u) in existing_edges and e.u != e.v
+            
             dx, dy = ex-sx, ey-sy; l = math.hypot(dx, dy)
             if l == 0: continue 
+            
             arr = tk.LAST if e.is_directed else tk.NONE
             arrow_shape = (16*self.zoom_scale, 20*self.zoom_scale, 8*self.zoom_scale)
             
-            if has_reverse:
-                mx, my = (sx+ex)/2, (sy+ey)/2; offset = 40 * self.zoom_scale 
-                nx, ny = -dy/l * offset, dx/l * offset; qx, qy = mx + nx, my + ny
-                reduction = current_r + (5 * self.zoom_scale)
-                ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
-                self.cv.create_line(sx, sy, qx, qy, ex_arrow, ey_arrow, smooth=True, fill="#34495e", width=line_width_edge, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND)
-                lbl_x, lbl_y = qx, qy
-            else:
-                reduction = current_r + (5 * self.zoom_scale)
-                if e.is_directed: ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
-                else: ex_arrow, ey_arrow = ex, ey 
-                self.cv.create_line(sx, sy, ex_arrow, ey_arrow, fill="#34495e", width=line_width_edge, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND)
-                lbl_x, lbl_y = (sx+ex)/2, (sy+ey)/2
+            # --- CHỈNH SỬA: LUÔN VẼ THẲNG ---
+            reduction = current_r + (5 * self.zoom_scale)
+            if e.is_directed: 
+                ex_arrow = ex - (dx/l) * reduction
+                ey_arrow = ey - (dy/l) * reduction
+            else: 
+                ex_arrow, ey_arrow = ex, ey 
+            
+            self.cv.create_line(sx, sy, ex_arrow, ey_arrow, fill="#34495e", width=line_width_edge, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND)
+            
+            # Vị trí text luôn ở giữa đường thẳng
+            lbl_x, lbl_y = (sx+ex)/2, (sy+ey)/2
                 
             w_txt = str(int(e.weight)) if e.weight.is_integer() else str(e.weight)
             # Thêm tag weight_lbl để quản lý lớp vẽ
@@ -134,19 +130,16 @@ class GraphGUI:
             self.cv.create_oval(sx - current_r, sy - current_r, sx + current_r, sy + current_r, fill=fill, outline="#27ae60", width=width, tags="node")
             self.cv.create_text(sx, sy, text=str(n.id), font=("Segoe UI", font_size_node, "bold"), fill="white", tags="node")
 
-    # --- HIGHLIGHT PATH + RAISE TEXT ---
+    # --- [UPDATE] HIGHLIGHT PATH THẲNG ---
     def hl_path_fill(self, p, col="#f1c40f", delay=500, draw_edges=True):
-        self.draw() # Reset
+        self.draw() # Reset màu
         current_r = self.base_r * self.zoom_scale
         line_width_sel = max(2, 6.0 * self.zoom_scale)
         edge_width_sel = max(2, 5.0 * self.zoom_scale)
         font_size_node = int(16 * self.zoom_scale)
         
-        existing_edges = set()
-        for e in self.graph.edges: existing_edges.add((e.u, e.v))
-
         for i in range(len(p)):
-            # 1. Node
+            # 1. Tô màu ĐỈNH (Node)
             nid = p[i]
             n = self.graph.nodes[nid]
             sx, sy = self.to_screen_x(n.x), self.to_screen_y(n.y)
@@ -158,7 +151,7 @@ class GraphGUI:
             self.root.update()
             self.root.after(delay // 2)
 
-            # 2. Edge
+            # 2. Tô màu CẠNH (Edge) - LUÔN THẲNG
             if draw_edges and i < len(p) - 1:
                 v_id = p[i+1]
                 next_n = self.graph.nodes[v_id]
@@ -166,29 +159,24 @@ class GraphGUI:
                 
                 dx, dy = ex-sx, ey-sy; l = math.hypot(dx, dy)
                 if l > 0:
-                    has_reverse = (v_id, nid) in existing_edges and nid != v_id
                     is_directed = False
                     for edge in self.graph.edges:
                         if edge.u == nid and edge.v == v_id and edge.is_directed:
                             is_directed = True; break
+                    
                     arr = tk.LAST if is_directed else tk.NONE
                     arrow_shape = (16*self.zoom_scale, 20*self.zoom_scale, 8*self.zoom_scale)
 
-                    if has_reverse:
-                        mx, my = (sx+ex)/2, (sy+ey)/2; offset = 40 * self.zoom_scale 
-                        nx, ny = -dy/l * offset, dx/l * offset; qx, qy = mx + nx, my + ny
-                        reduction = current_r + (5 * self.zoom_scale)
-                        ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
-                        
-                        self.cv.create_line(sx, sy, qx, qy, ex_arrow, ey_arrow, smooth=True, 
-                                            fill=col, width=edge_width_sel, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND, tags="highlight_edge")
-                    else:
-                        reduction = current_r + (5 * self.zoom_scale)
-                        if is_directed: ex_arrow = ex - (dx/l) * reduction; ey_arrow = ey - (dy/l) * reduction
-                        else: ex_arrow, ey_arrow = ex, ey 
-                        
-                        self.cv.create_line(sx, sy, ex_arrow, ey_arrow, 
-                                            fill=col, width=edge_width_sel, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND, tags="highlight_edge")
+                    # Luôn vẽ thẳng
+                    reduction = current_r + (5 * self.zoom_scale)
+                    if is_directed: 
+                        ex_arrow = ex - (dx/l) * reduction
+                        ey_arrow = ey - (dy/l) * reduction
+                    else: 
+                        ex_arrow, ey_arrow = ex, ey 
+                    
+                    self.cv.create_line(sx, sy, ex_arrow, ey_arrow, 
+                                        fill=col, width=edge_width_sel, arrow=arr, arrowshape=arrow_shape, capstyle=tk.ROUND, tags="highlight_edge")
                     
                     # Đẩy text trọng số và node lên trên cùng để không bị che
                     self.cv.tag_raise("weight_lbl")
@@ -214,7 +202,7 @@ class GraphGUI:
             self.cv.tag_raise("node")
             self.root.update(); self.root.after(300)
 
-    # --- EVENTS ---
+    # --- EVENT HANDLERS ---
     def on_right_click(self, event):
         wx = self.to_world_x(self.cv.canvasx(event.x)); wy = self.to_world_y(self.cv.canvasy(event.y))
         
@@ -385,7 +373,6 @@ class GraphGUI:
         state = self.graph.to_dict(); self.history.append(state)
         if len(self.history) > 20: self.history.pop(0)
 
-    # --- ĐÂY LÀ HÀM UNDO BẠN CẦN ---
     def undo(self, event=None):
         if not self.history: CustomPopup(self.root, "Thông báo", "Không có gì để Undo!"); return
         last_state = self.history.pop(); self.graph.from_dict(last_state); self.sel_node = None; self.draw()
@@ -413,22 +400,22 @@ class GraphGUI:
         else: self.save_state(); self.graph.add_node(wx, wy); self.draw(); self.sel_node=None
             
     def drag(self, e):
-        if self.drag_node is not None:
-            self.is_drag = True; n = self.graph.nodes[self.drag_node]
+        if self.drag_node is not None: 
+            self.is_drag=True; n=self.graph.nodes[self.drag_node]
             n.x = self.to_world_x(self.cv.canvasx(e.x)); n.y = self.to_world_y(self.cv.canvasy(e.y)); self.draw()
             
     def up(self, e):
-        if self.is_drag: self.drag_node = None; self.is_drag = False; return
+        if self.is_drag: self.drag_node=None; self.is_drag=False; return
         wx = self.to_world_x(self.cv.canvasx(e.x)); wy = self.to_world_y(self.cv.canvasy(e.y))
         nid = self.find_node(wx, wy)
         if nid is not None:
-            if self.sel_node is None: self.sel_node = nid; self.draw()
-            elif self.sel_node != nid:
-                d = EdgeDialog(self.root, self.sel_node, nid)
+            if self.sel_node is None: self.sel_node=nid; self.draw()
+            elif self.sel_node!=nid:
+                d=EdgeDialog(self.root, self.sel_node, nid)
                 if d.result: self.save_state(); self.graph.add_edge(self.sel_node, nid, d.result[0], d.result[1])
-                self.sel_node = None; self.draw()
-        else: self.sel_node = None; self.draw()
-        self.drag_node = None; self.is_drag = False
+                self.sel_node=None; self.draw()
+        else: self.sel_node=None; self.draw()
+        self.drag_node=None; self.is_drag=False
 
     def find_node(self, wx, wy):
         for n in self.graph.nodes:
